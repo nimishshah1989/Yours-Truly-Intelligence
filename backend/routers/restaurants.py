@@ -1,7 +1,5 @@
 """Restaurant (tenant) management endpoints."""
 
-"""Restaurant (tenant) management endpoints."""
-
 import logging
 from datetime import datetime
 from typing import List, Optional

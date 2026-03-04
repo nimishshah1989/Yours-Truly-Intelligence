@@ -3,6 +3,7 @@
 import random
 import sys
 from datetime import date, datetime, timedelta
+from typing import Dict, List, Set
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import text
@@ -124,7 +125,7 @@ def seed() -> None:
         print(f"Created restaurant: {restaurant.name} (id={rid})")
 
         # 2. Seed menu items
-        menu_map: dict[str, MenuItem] = {}
+        menu_map: Dict[str, MenuItem] = {}
         for name, cat, price, cost, itype in MENU_ITEMS:
             mi = MenuItem(
                 restaurant_id=rid, name=name, category=cat,
@@ -136,7 +137,7 @@ def seed() -> None:
         print(f"Seeded {len(MENU_ITEMS)} menu items")
 
         # 3. Seed customers (power law distribution)
-        customers: list[Customer] = []
+        customers: List[Customer] = []
         for i in range(200):
             cust = Customer(
                 restaurant_id=rid,
@@ -167,9 +168,9 @@ def seed() -> None:
             day_discounts = 0
             day_commissions = 0
             day_cancel = 0
-            platform_rev: dict[str, int] = {}
-            payment_rev: dict[str, int] = {}
-            cust_set: set[int] = set()
+            platform_rev: Dict[str, int] = {}
+            payment_rev: Dict[str, int] = {}
+            cust_set: Set[int] = set()
 
             # Generate orders hour by hour
             for hour in range(8, 23):
@@ -209,7 +210,7 @@ def seed() -> None:
                     chosen_items = random.sample(list(menu_map.keys()), min(num_items, len(menu_map)))
 
                     subtotal = 0
-                    order_items: list[OrderItem] = []
+                    order_items: List[OrderItem] = []
                     for item_name in chosen_items:
                         mi = menu_map[item_name]
                         qty = random.choices([1, 2], [0.8, 0.2])[0]

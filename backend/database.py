@@ -56,8 +56,8 @@ def get_readonly_db() -> Generator[Session, None, None]:
         session.close()
 
 
-def get_tenant_db(restaurant_id: int) -> Generator[Session, None, None]:
-    """Yield a DB session with RLS tenant context set via SET LOCAL."""
+def get_tenant_session(restaurant_id: int) -> Generator[Session, None, None]:
+    """Yield a DB session with RLS tenant context set via SET LOCAL (internal helper)."""
     session = SessionLocal()
     try:
         # SET LOCAL scopes to current transaction — requires autocommit=False

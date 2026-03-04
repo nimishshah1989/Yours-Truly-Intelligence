@@ -38,7 +38,7 @@ def health_check(db: Session = Depends(get_db)) -> HealthResponse:
         logger.error("Health check failed: %s", exc)
         return HealthResponse(
             status="degraded",
-            database=f"error: {exc}",
+            database="unreachable",
             restaurant_count=0,
             order_count=0,
         )
