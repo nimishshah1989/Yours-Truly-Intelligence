@@ -1,5 +1,7 @@
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
-const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "";
+// Empty string → relative URL → goes through Next.js rewrite proxy to backend
+// Set NEXT_PUBLIC_API_URL only to override (e.g. for direct local dev without proxy)
+const BASE_URL = (process.env.NEXT_PUBLIC_API_URL ?? "").trim();
+const API_KEY = (process.env.NEXT_PUBLIC_API_KEY ?? "").trim();
 
 export class ApiError extends Error {
   constructor(
@@ -13,8 +15,8 @@ export class ApiError extends Error {
 }
 
 function getRestaurantId(): string {
-  if (typeof window === "undefined") return "2";
-  return localStorage.getItem("ytip_restaurant_id") || "2";
+  if (typeof window === "undefined") return "5";
+  return localStorage.getItem("ytip_restaurant_id") || "5";
 }
 
 export function setRestaurantId(id: number): void {
