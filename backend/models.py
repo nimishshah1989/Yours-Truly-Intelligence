@@ -14,6 +14,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -75,6 +76,14 @@ class Order(Base):
     preparation_minutes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     cancel_reason: Mapped[Optional[str]] = mapped_column(String(200))
 
+    # Extended PetPooja fields
+    sub_order_type: Mapped[Optional[str]] = mapped_column(String(50))
+    tip: Mapped[int] = mapped_column(BigInteger, default=0)
+    service_charge: Mapped[int] = mapped_column(BigInteger, default=0)
+    waived_off: Mapped[int] = mapped_column(BigInteger, default=0)
+    part_payment: Mapped[int] = mapped_column(BigInteger, default=0)
+    custom_payment_type: Mapped[Optional[str]] = mapped_column(String(50))
+
     ordered_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
@@ -112,6 +121,12 @@ class OrderItem(Base):
     modifiers: Mapped[Optional[Dict]] = mapped_column(JSONB)
     is_void: Mapped[bool] = mapped_column(Boolean, default=False)
     void_reason: Mapped[Optional[str]] = mapped_column(String(200))
+
+    # Extended item fields
+    item_code: Mapped[Optional[str]] = mapped_column(String(50))
+    special_notes: Mapped[Optional[str]] = mapped_column(String(500))
+    variation_name: Mapped[Optional[str]] = mapped_column(String(100))
+
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     order: Mapped["Order"] = relationship("Order", back_populates="items")
@@ -460,4 +475,148 @@ class NlQuery(Base):
 
     __table_args__ = (
         Index("ix_nl_queries_restaurant", "restaurant_id"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Tally Integration
+# ---------------------------------------------------------------------------
+class TallyUpload(Base):
+    __tablename__ = "tally_uploads"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    restaurant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("restaurants.id"), nullable=False
+    )
+    filename: Mapped[str] = mapped_column(String(300), nullable=False)
+    file_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    period_start: Mapped[Optional[date]] = mapped_column(Date)
+    period_end: Mapped[Optional[date]] = mapped_column(Date)
+    records_imported: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(20), default="processing")
+    error_message: Mapped[Optional[str]] = mapped_column(Text)
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+
+    __table_args__ = (
+        Index("ix_tally_uploads_restaurant_date", "restaurant_id", "uploaded_at"),
+    )
+
+
+class TallyVoucher(Base):
+    __tablename__ = "tally_vouchers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    restaurant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("restaurants.id"), nullable=False
+    )
+    upload_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("tally_uploads.id")
+    )
+    voucher_date: Mapped[date] = mapped_column(Date, nullable=False)
+    voucher_number: Mapped[str] = mapped_column(String(100), nullable=False)
+    voucher_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    narration: Mapped[Optional[str]] = mapped_column(Text)
+    party_ledger: Mapped[Optional[str]] = mapped_column(String(200))
+    # Absolute value in paisa — sign is determined by ledger entries
+    amount: Mapped[int] = mapped_column(BigInteger, default=0)
+    # "cafe" | "roaster" — which legal entity this voucher belongs to
+    legal_entity: Mapped[str] = mapped_column(String(50), default="cafe")
+    # True for "POS SALE V2" voucher type — already synced from PetPooja
+    is_pp_synced: Mapped[bool] = mapped_column(Boolean, default=False)
+    # True for "YTC Purchase PP" — intercompany transfer between entities
+    is_intercompany: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint(
+            "restaurant_id", "voucher_number", "voucher_date",
+            name="uq_tally_voucher",
+        ),
+        Index("ix_tally_vouchers_restaurant_date", "restaurant_id", "voucher_date"),
+        Index("ix_tally_vouchers_restaurant_type", "restaurant_id", "voucher_type"),
+    )
+
+
+class TallyLedgerEntry(Base):
+    __tablename__ = "tally_ledger_entries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    restaurant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("restaurants.id"), nullable=False
+    )
+    voucher_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tally_vouchers.id"), nullable=False
+    )
+    ledger_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    # Absolute value in paisa — direction determined by is_debit
+    amount: Mapped[int] = mapped_column(BigInteger, default=0)
+    # True = debit entry, False = credit entry
+    is_debit: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_tally_ledger_restaurant_name", "restaurant_id", "ledger_name"),
+        Index("ix_tally_ledger_voucher", "voucher_id"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Owner Profile
+# ---------------------------------------------------------------------------
+class OwnerProfile(Base):
+    __tablename__ = "owner_profiles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # One profile per restaurant — enforced by unique constraint below
+    restaurant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("restaurants.id"), nullable=False
+    )
+    name: Mapped[Optional[str]] = mapped_column(String(200))
+    # Which analytics modules the owner cares about
+    concerns: Mapped[Optional[Dict]] = mapped_column(
+        JSONB, default={"revenue": True, "costs": True, "customers": True}
+    )
+    preferences: Mapped[Optional[Dict]] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint("restaurant_id", name="uq_owner_profile_restaurant"),
+        Index("ix_owner_profiles_restaurant", "restaurant_id", unique=True),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Reconciliation
+# ---------------------------------------------------------------------------
+class ReconciliationCheck(Base):
+    __tablename__ = "reconciliation_checks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    restaurant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("restaurants.id"), nullable=False
+    )
+    check_date: Mapped[date] = mapped_column(Date, nullable=False)
+    # "revenue_match" | "payment_mode_match" | "tax_match" | "data_gap"
+    check_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    pp_value: Mapped[int] = mapped_column(BigInteger, default=0)      # paisa
+    tally_value: Mapped[int] = mapped_column(BigInteger, default=0)   # paisa
+    variance: Mapped[int] = mapped_column(BigInteger, default=0)      # abs(pp - tally)
+    variance_pct: Mapped[float] = mapped_column(Float, default=0.0)
+    # "matched" | "minor_variance" | "major_variance" | "missing"
+    status: Mapped[str] = mapped_column(String(30), default="matched")
+    notes: Mapped[Optional[str]] = mapped_column(Text)
+    resolved: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint(
+            "restaurant_id", "check_date", "check_type",
+            name="uq_reconciliation_check",
+        ),
+        Index("ix_reconciliation_restaurant_date", "restaurant_id", "check_date"),
+        Index("ix_reconciliation_restaurant_status", "restaurant_id", "status"),
     )

@@ -25,10 +25,11 @@ SCP_CMD="scp -i $SSH_KEY -o StrictHostKeyChecking=no"
 echo "=== YTIP Deployment ==="
 
 # Step 1: Copy backend code to EC2
+# Use rsync-style SCP: wipe remote dir first, then copy to avoid stale files
 echo "[1/6] Copying backend code to EC2..."
-$SSH_CMD "mkdir -p $REMOTE_DIR"
-$SCP_CMD -r backend/ "$EC2_USER@$EC2_HOST:$REMOTE_DIR/backend/"
-$SCP_CMD -r database/ "$EC2_USER@$EC2_HOST:$REMOTE_DIR/database/"
+$SSH_CMD "mkdir -p $REMOTE_DIR && rm -rf $REMOTE_DIR/backend $REMOTE_DIR/database"
+$SCP_CMD -r backend "$EC2_USER@$EC2_HOST:$REMOTE_DIR/"
+$SCP_CMD -r database "$EC2_USER@$EC2_HOST:$REMOTE_DIR/"
 echo "  Done."
 
 # Step 2: Check env file exists on EC2
@@ -57,7 +58,7 @@ $SSH_CMD "docker run -d \
     --env-file $ENV_FILE \
     -p $PORT:$PORT \
     --restart unless-stopped \
-    --memory 256m \
+    --memory 384m \
     $IMAGE_NAME"
 echo "  Done."
 
@@ -73,7 +74,7 @@ fi
 
 # Step 6: Verify health
 echo "[6/6] Verifying health endpoint..."
-sleep 3
+sleep 8
 HEALTH=$(curl -sf "http://$EC2_HOST:$PORT/api/health" 2>/dev/null || echo "FAILED")
 if echo "$HEALTH" | grep -q "ok"; then
     echo "  Health check passed: $HEALTH"

@@ -23,8 +23,29 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Startup and shutdown lifecycle."""
     logger.info("Starting YTIP backend...")
     init_db()
+
+    # Start background scheduler (alerts, digests, ETL cron jobs)
+    try:
+        from etl.scheduler import start_scheduler, stop_scheduler  # type: ignore[import]
+        start_scheduler()
+        logger.info("Scheduler started")
+        _scheduler_running = True
+    except ImportError:
+        logger.warning("etl.scheduler not yet implemented — skipping scheduler start")
+        _scheduler_running = False
+
     logger.info("YTIP backend ready")
     yield
+
+    # Graceful shutdown
+    if _scheduler_running:
+        try:
+            from etl.scheduler import stop_scheduler  # type: ignore[import]
+            stop_scheduler()
+            logger.info("Scheduler stopped")
+        except Exception as exc:
+            logger.warning("Scheduler stop error (non-fatal): %s", exc)
+
     logger.info("Shutting down YTIP backend")
 
 
@@ -52,7 +73,7 @@ app.add_middleware(RateLimitMiddleware)
 # 3. API key authentication (disabled when api_key is empty)
 app.add_middleware(ApiKeyMiddleware)
 
-# Mount routers
+# Mount routers — existing
 from routers.health import router as health_router
 from routers.restaurants import router as restaurants_router
 from routers.revenue import router as revenue_router
@@ -64,6 +85,14 @@ from routers.operations import router as operations_router
 from routers.home import router as home_router
 from routers.chat import router as chat_router
 
+# Mount routers — new Phase 2 / Phase 3 / Phase 4
+from routers.tally import router as tally_router
+from routers.sync import router as sync_router
+from routers.reconciliation import router as reconciliation_router
+from routers.alerts import router as alerts_router
+from routers.digests import router as digests_router
+from routers.dashboards import router as dashboards_router
+
 app.include_router(health_router)
 app.include_router(restaurants_router)
 app.include_router(revenue_router)
@@ -74,6 +103,12 @@ app.include_router(leakage_router)
 app.include_router(operations_router)
 app.include_router(home_router)
 app.include_router(chat_router)
+app.include_router(tally_router)
+app.include_router(sync_router)
+app.include_router(reconciliation_router)
+app.include_router(alerts_router)
+app.include_router(digests_router)
+app.include_router(dashboards_router)
 
 
 if __name__ == "__main__":

@@ -13,6 +13,7 @@ import {
   LayoutDashboard,
   Bell,
   FileText,
+  GitCompareArrows,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
@@ -31,6 +32,7 @@ const DASHBOARD_NAV: NavItem[] = [
   { href: "/leakage", label: "Leakage & Loss", icon: AlertTriangle },
   { href: "/customers", label: "Customers", icon: Users },
   { href: "/operations", label: "Operations", icon: Clock },
+  { href: "/reconciliation", label: "Reconciliation", icon: GitCompareArrows },
 ];
 
 const TOOLS_NAV: NavItem[] = [

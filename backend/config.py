@@ -17,12 +17,27 @@ class Settings(BaseSettings):
     resend_api_key: str = ""
     notify_emails: str = ""
 
-    # PetPooja POS
+    # PetPooja POS — Orders API
     petpooja_app_key: str = ""
     petpooja_app_secret: str = ""
     petpooja_access_token: str = ""
     petpooja_restaurant_id: str = ""
     petpooja_base_url: str = "https://api.petpooja.com/v2"
+
+    # PetPooja Menu API (separate credentials from Orders API)
+    petpooja_menu_app_key: str = ""
+    petpooja_menu_app_secret: str = ""
+    petpooja_menu_access_token: str = ""
+    # menuSharingCode = RestID — e.g. "34cn0ieb1f" for YoursTruly
+    petpooja_rest_id: str = ""
+    # Full cookie value: "PETPOOJA_API=..."
+    petpooja_cookie: str = ""
+
+    # Tally
+    tally_upload_dir: str = "/tmp/tally_uploads"
+
+    # Email
+    resend_from_email: str = "alerts@yourstruly.in"
 
     # Auth
     api_key: str = ""  # Set to enable API key auth; empty = disabled

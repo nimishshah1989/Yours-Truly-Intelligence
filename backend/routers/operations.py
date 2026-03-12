@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api/operations", tags=["Operational Efficiency"])
 # -- Response models ----------------------------------------------------------
 class SeatHourCell(BaseModel):
     x: int = Field(description="Hour of day (0-23)")
-    y: str = Field(description="Table number")
+    y: str = Field(description="Day of week (Mon-Sun)")
     value: int = Field(description="Revenue in paisa")
 
 class SeatHourResponse(BaseModel):
@@ -80,19 +80,21 @@ def _daypart_label(hour: int) -> str:
 
 
 # -- 1. Seat-Hour Revenue Heatmap ---------------------------------------------
+DOW_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+
 @router.get("/seat-hour-revenue", response_model=SeatHourResponse)
 def seat_hour_revenue(
     rid: int = Depends(get_restaurant_id),
     period_range: Tuple[date, date] = Depends(get_period_range),
     db: Session = Depends(get_readonly_db),
 ):
-    """Revenue per table per hour heatmap for dine-in orders."""
+    """Revenue by day-of-week × hour heatmap — shows when revenue peaks across the week."""
     start_date, end_date = period_range
     try:
         start_dt, end_dt = date_to_ist_range(start_date, end_date)
         rows = (
             db.query(
-                Order.table_number,
+                extract("dow", Order.ordered_at).label("dow"),
                 extract("hour", Order.ordered_at).label("hour"),
                 func.sum(Order.total_amount).label("revenue"),
             )
@@ -100,18 +102,17 @@ def seat_hour_revenue(
                 Order.restaurant_id == rid,
                 Order.ordered_at >= start_dt,
                 Order.ordered_at <= end_dt,
-                Order.order_type == "dine_in",
-                Order.table_number.isnot(None),
                 Order.is_cancelled.is_(False),
             )
-            .group_by(Order.table_number, "hour")
+            .group_by("dow", "hour")
             .all()
         )
         cells = []
         max_value = 0
-        for table, hour, revenue in rows:
+        for dow, hour, revenue in rows:
             rev = int(revenue or 0)
-            cells.append(SeatHourCell(x=int(hour), y=table, value=rev))
+            day_label = DOW_LABELS[int(dow) % 7]
+            cells.append(SeatHourCell(x=int(hour), y=day_label, value=rev))
             if rev > max_value:
                 max_value = rev
         return SeatHourResponse(cells=cells, max_value=max_value)

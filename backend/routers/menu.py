@@ -61,7 +61,7 @@ def bcg_matrix(
     rid: int = Depends(get_restaurant_id),
     period_range: tuple[date, date] = Depends(get_period_range),
     db: Session = Depends(get_readonly_db),
-) -> Dict[str, Any]:
+) -> List[Dict[str, Any]]:
     """BCG-style quadrant: popularity vs profitability for each menu item."""
     start, end = period_range
     try:
@@ -107,7 +107,7 @@ def category_mix(
     rid: int = Depends(get_restaurant_id),
     period_range: tuple[date, date] = Depends(get_period_range),
     db: Session = Depends(get_readonly_db),
-) -> Dict[str, Any]:
+) -> List[Dict[str, Any]]:
     """Weekly category % contribution to total revenue over time."""
     start, end = period_range
     try:
@@ -137,7 +137,7 @@ def dead_skus(
     rid: int = Depends(get_restaurant_id),
     period_range: tuple[date, date] = Depends(get_period_range),
     db: Session = Depends(get_readonly_db),
-) -> Dict[str, Any]:
+) -> List[Dict[str, Any]]:
     """Active menu items with zero or near-zero sales in the period."""
     start, end = period_range
     try:

@@ -742,6 +742,38 @@ export interface Digest {
 }
 
 // ---------------------------------------------------------------------------
+// API response types — Reconciliation
+// ---------------------------------------------------------------------------
+
+export type ReconciliationStatus =
+  | "matched"
+  | "minor_variance"
+  | "major_variance"
+  | "missing";
+
+export interface ReconciliationSummary {
+  total_checks: number;
+  matched_count: number;
+  minor_variance_count: number;
+  major_variance_count: number;
+  missing_count: number;
+  total_variance_amount: number; // paisa
+}
+
+export interface ReconciliationCheck {
+  id: number;
+  check_date: string;
+  check_type: string; // "revenue_match" | "payment_mode_match" | "tax_match" | "data_gap"
+  pp_value: number; // paisa
+  tally_value: number; // paisa
+  variance: number; // paisa
+  variance_pct: number;
+  status: ReconciliationStatus;
+  notes: string | null;
+  resolved: boolean;
+}
+
+// ---------------------------------------------------------------------------
 // API responses — misc
 // ---------------------------------------------------------------------------
 

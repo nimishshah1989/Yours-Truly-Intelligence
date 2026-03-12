@@ -17,15 +17,18 @@ export function useRfmSegments() {
 }
 
 export function useCohorts() {
-  return useSWR("/api/customers/cohorts", fetcher);
+  const { periodParams } = usePeriod();
+  return useSWR(`/api/customers/cohorts?${periodParams}`, fetcher);
 }
 
 export function useChurnRisk() {
-  return useSWR("/api/customers/churn-risk", fetcher);
+  const { periodParams } = usePeriod();
+  return useSWR(`/api/customers/churn-risk?${periodParams}`, fetcher);
 }
 
 export function useLtvDistribution() {
-  return useSWR("/api/customers/ltv-distribution", fetcher);
+  const { periodParams } = usePeriod();
+  return useSWR(`/api/customers/ltv-distribution?${periodParams}`, fetcher);
 }
 
 export function useCustomerConcentration() {
