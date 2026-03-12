@@ -8,8 +8,10 @@ export function cn(...inputs: ClassValue[]) {
 /**
  * Format paisa amount to Indian currency string.
  * 50000000 → "₹5,00,000" (5 lakh)
+ * Handles null, undefined, and NaN gracefully.
  */
-export function formatPrice(paisa: number): string {
+export function formatPrice(paisa: number | null | undefined): string {
+  if (paisa == null || isNaN(paisa)) return "₹0";
   const rupees = paisa / 100;
   return "₹" + formatIndianNumber(rupees);
 }
@@ -17,8 +19,10 @@ export function formatPrice(paisa: number): string {
 /**
  * Compact price for tight spaces.
  * 50000000 → "₹5.0L", 1000000000 → "₹1.0Cr"
+ * Handles null, undefined, and NaN gracefully.
  */
-export function formatPriceCompact(paisa: number): string {
+export function formatPriceCompact(paisa: number | null | undefined): string {
+  if (paisa == null || isNaN(paisa)) return "₹0";
   const rupees = paisa / 100;
   if (rupees >= 10000000) {
     return `₹${(rupees / 10000000).toFixed(1)}Cr`;
@@ -36,8 +40,9 @@ export function formatPriceCompact(paisa: number): string {
  * Format number with Indian grouping: 1,00,000 not 100,000.
  */
 export function formatIndianNumber(num: number): string {
+  if (isNaN(num)) return "0";
   const parts = Math.abs(num).toFixed(0).split(".");
-  let intPart = parts[0];
+  const intPart = parts[0];
   const sign = num < 0 ? "-" : "";
 
   if (intPart.length <= 3) return sign + intPart;
@@ -48,11 +53,13 @@ export function formatIndianNumber(num: number): string {
   return sign + grouped + "," + last3;
 }
 
-export function formatPercent(value: number, decimals: number = 1): string {
+export function formatPercent(value: number | null | undefined, decimals: number = 1): string {
+  if (value == null || isNaN(value)) return "+0.0%";
   return `${value >= 0 ? "+" : ""}${value.toFixed(decimals)}%`;
 }
 
-export function formatNumber(num: number): string {
+export function formatNumber(num: number | null | undefined): string {
+  if (num == null || isNaN(num)) return "0";
   return formatIndianNumber(Math.round(num));
 }
 

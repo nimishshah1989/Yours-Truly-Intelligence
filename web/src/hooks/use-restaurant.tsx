@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import useSWR, { mutate as globalMutate } from "swr";
-import { api, setCurrentRestaurantId } from "@/lib/api";
+import { api, setRestaurantId } from "@/lib/api";
 import type { Restaurant, RestaurantListResponse } from "@/lib/types";
 
 interface RestaurantContextValue {
@@ -39,13 +39,13 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (restaurants.length > 0 && currentId === null) {
       setCurrentId(restaurants[0].id);
-      setCurrentRestaurantId(restaurants[0].id);
+      setRestaurantId(restaurants[0].id);
     }
   }, [restaurants, currentId]);
 
   const switchRestaurant = useCallback((id: number) => {
     setCurrentId(id);
-    setCurrentRestaurantId(id);
+    setRestaurantId(id);
     // Clear all SWR caches when switching restaurant
     globalMutate(() => true, undefined, { revalidate: true });
   }, []);

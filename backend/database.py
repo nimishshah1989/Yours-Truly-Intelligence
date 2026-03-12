@@ -56,23 +56,6 @@ def get_readonly_db() -> Generator[Session, None, None]:
         session.close()
 
 
-def get_tenant_session(restaurant_id: int) -> Generator[Session, None, None]:
-    """Yield a DB session with RLS tenant context set via SET LOCAL (internal helper)."""
-    session = SessionLocal()
-    try:
-        # SET LOCAL scopes to current transaction — requires autocommit=False
-        session.execute(
-            text("SET LOCAL app.current_restaurant_id = :rid"),
-            {"rid": str(restaurant_id)},
-        )
-        yield session
-        session.commit()
-    except Exception:
-        session.rollback()
-        raise
-    finally:
-        session.close()
-
 
 def init_db() -> None:
     """Create all tables from SQLAlchemy models."""

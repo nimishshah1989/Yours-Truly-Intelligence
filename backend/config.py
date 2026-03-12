@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     # Database
-    database_url: str = "postgresql://ytip_app:password@localhost:5432/ytip"
+    database_url: str = ""
     database_url_readonly: str = ""
 
     # Claude AI
@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     petpooja_access_token: str = ""
     petpooja_restaurant_id: str = ""
     petpooja_base_url: str = "https://api.petpooja.com/v2"
+
+    # Auth
+    api_key: str = ""  # Set to enable API key auth; empty = disabled
+
+    # Rate limiting
+    rate_limit_per_minute: int = 120  # requests per minute per IP
 
     # CORS
     cors_origins: str = "http://localhost:3000"

@@ -72,6 +72,7 @@ class Order(Base):
     table_number: Mapped[Optional[str]] = mapped_column(String(20))
     staff_name: Mapped[Optional[str]] = mapped_column(String(100))
     is_cancelled: Mapped[bool] = mapped_column(Boolean, default=False)
+    preparation_minutes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     cancel_reason: Mapped[Optional[str]] = mapped_column(String(200))
 
     ordered_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)

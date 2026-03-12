@@ -1,0 +1,136 @@
+"""Home page executive summary — today's KPIs + sparklines + WoW changes."""
+
+import logging
+from datetime import datetime, timedelta
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from database import get_readonly_db
+from dependencies import date_to_ist_range, get_restaurant_id, safe_pct_change
+from models import Customer, DailySummary, Order
+from services.analytics_service import IST, today_ist
+
+logger = logging.getLogger("ytip.home")
+router = APIRouter(prefix="/api/home", tags=["Home"])
+
+
+# ---------------------------------------------------------------------------
+# Response models
+# ---------------------------------------------------------------------------
+class StatCardResponse(BaseModel):
+    label: str
+    value: str
+    raw_value: Optional[int] = None
+    change: Optional[float] = None
+    change_label: Optional[str] = None
+    sparkline: Optional[List[int]] = None
+    prefix: Optional[str] = None
+    suffix: Optional[str] = None
+
+
+class HomeSummaryResponse(BaseModel):
+    stats: List[StatCardResponse]
+    last_updated: str
+
+
+# ---------------------------------------------------------------------------
+# Endpoint
+# ---------------------------------------------------------------------------
+@router.get("/summary", response_model=HomeSummaryResponse)
+def home_summary(
+    restaurant_id: int = Depends(get_restaurant_id),
+    db: Session = Depends(get_readonly_db),
+):
+    """Executive summary for the home page."""
+    try:
+        today = today_ist()
+        today_start, today_end = date_to_ist_range(today, today)
+
+        # Today's live stats from orders (DailySummary may not exist yet)
+        today_row = db.query(
+            func.coalesce(func.sum(Order.total_amount), 0).label("revenue"),
+            func.count(Order.id).label("orders"),
+        ).filter(
+            Order.restaurant_id == restaurant_id,
+            Order.is_cancelled.is_(False),
+            Order.ordered_at >= today_start,
+            Order.ordered_at <= today_end,
+        ).one()
+
+        today_revenue = int(today_row.revenue)
+        today_orders = int(today_row.orders)
+        today_aov = today_revenue // max(today_orders, 1)
+
+        # Same day last week for WoW comparison
+        lw_date = today - timedelta(days=7)
+        lw_summary = db.query(DailySummary).filter(
+            DailySummary.restaurant_id == restaurant_id,
+            DailySummary.summary_date == lw_date,
+        ).first()
+
+        lw_revenue = lw_summary.total_revenue if lw_summary else 0
+        lw_orders = lw_summary.total_orders if lw_summary else 0
+        wow_rev_change = safe_pct_change(today_revenue, lw_revenue)
+        wow_orders_change = safe_pct_change(today_orders, lw_orders)
+
+        # 7-day sparkline from daily_summaries
+        spark_start = today - timedelta(days=6)
+        sparkline_rows = db.query(
+            DailySummary.summary_date,
+            DailySummary.total_revenue,
+        ).filter(
+            DailySummary.restaurant_id == restaurant_id,
+            DailySummary.summary_date >= spark_start,
+            DailySummary.summary_date <= today,
+        ).order_by(DailySummary.summary_date).all()
+
+        rev_sparkline = [int(r.total_revenue) for r in sparkline_rows]
+
+        # Active customers (visited in last 30 days)
+        thirty_ago = today - timedelta(days=30)
+        active_customers = db.query(func.count(Customer.id)).filter(
+            Customer.restaurant_id == restaurant_id,
+            Customer.last_visit >= thirty_ago,
+        ).scalar() or 0
+
+        stats = [
+            StatCardResponse(
+                label="Today's Revenue",
+                value=str(today_revenue),
+                raw_value=today_revenue,
+                change=wow_rev_change,
+                change_label="vs last week",
+                sparkline=rev_sparkline,
+                prefix="₹",
+            ),
+            StatCardResponse(
+                label="Orders Today",
+                value=str(today_orders),
+                change=wow_orders_change,
+                change_label="vs last week",
+            ),
+            StatCardResponse(
+                label="Avg Order Value",
+                value=str(today_aov),
+                raw_value=today_aov,
+                prefix="₹",
+            ),
+            StatCardResponse(
+                label="Active Customers",
+                value=str(active_customers),
+                suffix=" (30d)",
+            ),
+        ]
+
+        return HomeSummaryResponse(
+            stats=stats,
+            last_updated=datetime.now(IST).isoformat(),
+        )
+
+    except Exception as exc:
+        logger.error("Home summary failed for restaurant %s: %s", restaurant_id, exc)
+        raise HTTPException(status_code=500, detail="Failed to load summary") from exc

@@ -82,6 +82,7 @@ CREATE TABLE IF NOT EXISTS orders (
     table_number VARCHAR(20),
     staff_name VARCHAR(100),
     is_cancelled BOOLEAN DEFAULT FALSE,
+    preparation_minutes INTEGER,
     cancel_reason VARCHAR(200),
     ordered_at TIMESTAMP NOT NULL,
     created_at TIMESTAMP DEFAULT NOW()

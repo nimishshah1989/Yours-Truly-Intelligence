@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
-from database import get_db
+from database import get_readonly_db
 from models import Order, Restaurant
 
 logger = logging.getLogger("ytip.health")
@@ -22,7 +22,7 @@ class HealthResponse(BaseModel):
 
 
 @router.get("", response_model=HealthResponse)
-def health_check(db: Session = Depends(get_db)) -> HealthResponse:
+def health_check(db: Session = Depends(get_readonly_db)) -> HealthResponse:
     """Check API and database connectivity."""
     try:
         db.execute(text("SELECT 1"))

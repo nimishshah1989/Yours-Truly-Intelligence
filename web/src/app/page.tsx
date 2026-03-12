@@ -2,37 +2,24 @@
 
 import { Suspense } from "react";
 import { PageHeader } from "@/components/layout/page-header";
-import { PeriodSelector } from "@/components/layout/period-selector";
 import { StatCard } from "@/components/widgets/stat-card";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRestaurant } from "@/hooks/use-restaurant";
-
-const PLACEHOLDER_STATS = [
-  { label: "Today's Revenue", value: "—", changeLabel: "Loading..." },
-  { label: "Orders Today", value: "—", changeLabel: "Loading..." },
-  { label: "Avg Order Value", value: "—", changeLabel: "Loading..." },
-  { label: "Active Customers", value: "—", changeLabel: "Loading..." },
-];
+import { useHomeSummary } from "@/hooks/use-home";
+import type { StatCardData } from "@/lib/types";
 
 export default function HomePage() {
-  const { current, isLoading } = useRestaurant();
+  const { current } = useRestaurant();
 
   return (
     <Suspense fallback={<HomePageSkeleton />}>
       <PageHeader
         title={current?.name ?? "Dashboard"}
         description="Executive summary — key metrics at a glance"
-      >
-        <PeriodSelector />
-      </PageHeader>
+      />
 
-      {/* Stat cards row */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {PLACEHOLDER_STATS.map((stat) => (
-          <StatCard key={stat.label} data={stat} />
-        ))}
-      </div>
+      <HomeStats />
 
       {/* Pinned dashboards placeholder */}
       <div className="mt-8">
@@ -42,14 +29,60 @@ export default function HomePage() {
         <Card className="rounded-xl border-dashed border-slate-300">
           <CardContent className="flex h-48 items-center justify-center p-6">
             <p className="text-sm text-muted-foreground">
-              {isLoading
-                ? "Loading..."
-                : "No pinned dashboards yet. Pin dashboards from the AI chat or dashboard library."}
+              No pinned dashboards yet. Pin dashboards from the AI chat or
+              dashboard library.
             </p>
           </CardContent>
         </Card>
       </div>
     </Suspense>
+  );
+}
+
+interface HomeSummaryResponse {
+  stats: Array<{
+    label: string;
+    value: string;
+    change?: number | null;
+    change_label?: string | null;
+    sparkline?: number[] | null;
+    prefix?: string | null;
+    suffix?: string | null;
+  }>;
+  last_updated: string;
+}
+
+function HomeStats() {
+  const { data, isLoading } = useHomeSummary() as {
+    data: HomeSummaryResponse | undefined;
+    isLoading: boolean;
+  };
+
+  if (isLoading || !data) {
+    return (
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {[1, 2, 3, 4].map((i) => (
+          <Skeleton key={i} className="h-28 rounded-xl" />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {data.stats.map((stat) => {
+        const cardData: StatCardData = {
+          label: stat.label,
+          value: stat.value,
+          change: stat.change ?? undefined,
+          changeLabel: stat.change_label ?? undefined,
+          sparkline: stat.sparkline ?? undefined,
+          prefix: stat.prefix ?? undefined,
+          suffix: stat.suffix ?? undefined,
+        };
+        return <StatCard key={stat.label} data={cardData} />;
+      })}
+    </div>
   );
 }
 

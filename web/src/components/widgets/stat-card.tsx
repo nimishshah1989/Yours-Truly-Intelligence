@@ -9,8 +9,8 @@ interface StatCardProps {
 export function StatCard({ data }: StatCardProps) {
   const { label, value, change, changeLabel } = data;
 
-  const isPositive = change !== undefined && change >= 0;
-  const isNegative = change !== undefined && change < 0;
+  const isPositive = change != null && change >= 0;
+  const isNegative = change != null && change < 0;
 
   return (
     <Card className="rounded-xl border-slate-200">
@@ -22,7 +22,7 @@ export function StatCard({ data }: StatCardProps) {
             {value}
             {data.suffix}
           </span>
-          {change !== undefined && (
+          {change != null && (
             <span
               className={cn(
                 "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium tabular-nums",

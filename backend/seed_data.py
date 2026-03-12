@@ -1,4 +1,4 @@
-"""Generate 90 days of realistic café mock data."""
+"""Generate 90 days of realistic cafe mock data."""
 
 import random
 import sys
@@ -89,7 +89,7 @@ INVENTORY_ITEMS = [
 
 
 def _hour_weight(hour: int, is_weekend: bool) -> float:
-    """Weight for order probability by hour — models real café traffic."""
+    """Weight for order probability by hour — models real cafe traffic."""
     base = {
         8: 0.3, 9: 0.7, 10: 0.5, 11: 0.6, 12: 1.0, 13: 1.0,
         14: 0.6, 15: 0.5, 16: 0.7, 17: 0.8, 18: 0.9, 19: 1.0,
@@ -225,6 +225,15 @@ def seed() -> None:
                         )
                         order_items.append(oi)
 
+                    # Void simulation for leakage module — ~5% of non-cancelled orders
+                    if not is_cancelled and random.random() < 0.05:
+                        void_target = random.choice(order_items)
+                        void_target.is_void = True
+                        void_target.void_reason = random.choice([
+                            "wrong_item", "quality_issue",
+                            "customer_changed_mind", "kitchen_error",
+                        ])
+
                     tax = int(subtotal * 0.05)  # 5% GST
                     discount = int(subtotal * random.choice([0, 0, 0, 0.05, 0.1, 0.15])) if not is_cancelled else 0
                     commission = int(subtotal * 0.22) if platform == "swiggy" else (
@@ -245,6 +254,7 @@ def seed() -> None:
                         table_number=random.choice(TABLES) if order_type == "dine_in" else None,
                         staff_name=random.choice(STAFF),
                         is_cancelled=is_cancelled, cancel_reason=cancel_reason,
+                        preparation_minutes=None if is_cancelled else max(5, int(random.gauss(20, 8))),
                         ordered_at=ordered_at,
                     )
                     db.add(order)
