@@ -120,8 +120,10 @@ def _parse_voucher(voucher_el: ET.Element) -> Optional[TallyVoucherData]:
     amount = _to_paisa(voucher_el.findtext("AMOUNT") or "0")
 
     legal_entity = _detect_legal_entity(narration, party_ledger)
-    is_pp_synced = voucher_type == "POS SALE V2"
-    is_intercompany = voucher_type == "YTC Purchase PP"
+    # PP-synced = PetPooja POS sale vouchers (already counted in orders revenue)
+    is_pp_synced = voucher_type in ("POS SALE V2", "POS Sale", "Roastrey Sale PP", "Sales")
+    # Intercompany = explicit fund transfers between group entities (not vendor purchases)
+    is_intercompany = False
 
     ledger_entries = _parse_ledger_entries(voucher_el)
 

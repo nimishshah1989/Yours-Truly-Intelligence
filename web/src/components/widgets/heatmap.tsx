@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback } from "react";
 import { CHART_COLOR } from "@/lib/constants";
-import { cn, formatPrice } from "@/lib/utils";
+import { cn, formatPrice, formatPriceCompact } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -187,7 +187,7 @@ export function HeatmapWidget({ data, config }: HeatmapWidgetProps) {
                   onMouseEnter={(e) => handleMouseEnter(xLabel, yLabel, value, e)}
                   onMouseLeave={handleMouseLeave}
                 >
-                  {value > 0 ? (currency ? formatPrice(value) : value) : ""}
+                  {value > 0 ? (currency ? formatPriceCompact(value) : value) : ""}
                 </div>
               );
             })}

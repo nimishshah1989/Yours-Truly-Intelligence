@@ -14,6 +14,7 @@ import {
   Bell,
   FileText,
   GitCompareArrows,
+  Database,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
@@ -40,6 +41,7 @@ const TOOLS_NAV: NavItem[] = [
   { href: "/dashboards", label: "Dashboards", icon: LayoutDashboard },
   { href: "/alerts", label: "Alerts", icon: Bell },
   { href: "/digests", label: "Digests", icon: FileText },
+  { href: "/data", label: "Data Status", icon: Database },
 ];
 
 function NavLink({ item, isActive }: { item: NavItem; isActive: boolean }) {

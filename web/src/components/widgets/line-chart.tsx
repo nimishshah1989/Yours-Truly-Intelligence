@@ -13,6 +13,13 @@ import {
 import { TOOLTIP_STYLE, AXIS_STYLE, GRID_STYLE, getChartColor } from "@/lib/chart-config";
 import { formatPriceCompact, formatDateShort } from "@/lib/utils";
 
+/** Format x-axis tick: try date parse first, fall back to raw string */
+function smartFormatX(v: string): string {
+  if (!v) return "";
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? String(v) : formatDateShort(v);
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -77,7 +84,7 @@ export function LineChartWidget({ data, config }: LineChartWidgetProps) {
         <XAxis
           dataKey={xKey}
           {...AXIS_STYLE}
-          tickFormatter={(v: string) => formatDateShort(v)}
+          tickFormatter={(v: string) => smartFormatX(v)}
           tickMargin={8}
         />
         <YAxis
@@ -97,7 +104,7 @@ export function LineChartWidget({ data, config }: LineChartWidgetProps) {
             const display = currency ? formatPriceCompact(v) : v.toLocaleString("en-IN");
             return [display, name ?? ""];
           }}
-          labelFormatter={(label) => formatDateShort(String(label))}
+          labelFormatter={(label) => smartFormatX(String(label))}
         />
         <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
         {lines.map((line, idx) => (

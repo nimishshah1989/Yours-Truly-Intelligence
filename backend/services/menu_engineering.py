@@ -52,16 +52,24 @@ def get_top_items(db: Session, rid: int, start: date, end: date, limit: int = 15
 
 
 def get_bcg_matrix(db: Session, rid: int, start: date, end: date):
-    """BCG quadrant: popularity (qty) vs profitability (margin %).
-    Quadrants split at median: Stars/Puzzles/Plowhorses/Dogs."""
+    """BCG quadrant: popularity (qty sold) vs revenue contribution (% of total revenue).
+
+    Since PetPooja does not provide cost_price, profitability cannot be computed.
+    Revenue contribution (item_revenue / total_revenue * 100) is used as the y-axis
+    instead, giving a meaningful Popularity vs Value quadrant.
+
+    Quadrant labels:
+      - Stars      = high qty, high revenue (bestsellers — protect and promote)
+      - Premium    = low qty, high revenue (high-value, low-volume — push more)
+      - Drivers    = high qty, low revenue (volume items — low ASP)
+      - Dogs       = low qty, low revenue (review for removal)
+    """
     rows = (
         _base_item_query(db, rid, start, end)
         .with_entities(
             OrderItem.item_name, OrderItem.category,
             func.sum(OrderItem.quantity).label("quantity"),
             func.sum(OrderItem.total_price).label("revenue"),
-            # cost_price in seed data already includes quantity multiplication
-            func.sum(OrderItem.cost_price).label("total_cost"),
         )
         .group_by(OrderItem.item_name, OrderItem.category).all()
     )
@@ -69,19 +77,20 @@ def get_bcg_matrix(db: Session, rid: int, start: date, end: date):
         return []
 
     items = []
+    total_revenue = sum(int(r.revenue or 0) for r in rows)
     for r in rows:
-        rev, cost, qty = int(r.revenue or 0), int(r.total_cost or 0), int(r.quantity or 0)
-        margin = ((rev - cost) / rev * 100) if rev > 0 else 0.0
+        rev, qty = int(r.revenue or 0), int(r.quantity or 0)
+        rev_pct = round((rev / total_revenue * 100), 2) if total_revenue > 0 else 0.0
         items.append({"name": r.item_name, "category": r.category,
-                       "popularity": qty, "profitability": round(margin, 2), "revenue": rev})
+                       "popularity": qty, "revenue_pct": rev_pct, "revenue": rev})
 
     pop_med = median([i["popularity"] for i in items])
-    prof_med = median([i["profitability"] for i in items])
+    rev_med = median([i["revenue_pct"] for i in items])
     for it in items:
-        hp, hf = it["popularity"] >= pop_med, it["profitability"] >= prof_med
+        hp, hr = it["popularity"] >= pop_med, it["revenue_pct"] >= rev_med
         it["quadrant"] = (
-            "Stars" if hp and hf else "Puzzles" if not hp and hf
-            else "Plowhorses" if hp else "Dogs"
+            "Stars" if hp and hr else "Premium" if not hp and hr
+            else "Drivers" if hp else "Dogs"
         )
     return items
 
@@ -182,12 +191,12 @@ def get_category_mix(db: Session, rid: int, start: date, end: date):
     rows = (
         _base_item_query(db, rid, start, end)
         .with_entities(
-            func.to_char(func.date_trunc("week", Order.ordered_at), "IYYY-\"W\"IW").label("week"),
+            func.date_trunc("week", Order.ordered_at).label("week"),
             OrderItem.category,
             func.sum(OrderItem.total_price).label("revenue"),
         )
         .group_by(
-            func.to_char(func.date_trunc("week", Order.ordered_at), "IYYY-\"W\"IW"),
+            func.date_trunc("week", Order.ordered_at),
             OrderItem.category,
         ).all()
     )
@@ -196,15 +205,16 @@ def get_category_mix(db: Session, rid: int, start: date, end: date):
 
     weekly: Dict[str, Dict[str, int]] = defaultdict(dict)
     for r in rows:
-        weekly[r.week][r.category] = int(r.revenue or 0)
+        wk = r.week.date().isoformat() if hasattr(r.week, "date") else str(r.week)[:10]
+        weekly[wk][r.category] = int(r.revenue or 0)
 
     results = []
-    for week in sorted(weekly.keys()):
-        totals = weekly[week]
+    for week_key in sorted(weekly.keys()):
+        totals = weekly[week_key]
         week_total = sum(totals.values())
         if week_total == 0:
             continue
-        entry: Dict[str, Any] = {"week": week}
+        entry: Dict[str, Any] = {"week": week_key}
         for cat, rev in totals.items():
             entry[cat] = round(rev / week_total * 100, 2)
         results.append(entry)

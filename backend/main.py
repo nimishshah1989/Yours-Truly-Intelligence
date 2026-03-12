@@ -92,6 +92,7 @@ from routers.reconciliation import router as reconciliation_router
 from routers.alerts import router as alerts_router
 from routers.digests import router as digests_router
 from routers.dashboards import router as dashboards_router
+from routers.data_status import router as data_status_router
 
 app.include_router(health_router)
 app.include_router(restaurants_router)
@@ -109,6 +110,7 @@ app.include_router(reconciliation_router)
 app.include_router(alerts_router)
 app.include_router(digests_router)
 app.include_router(dashboards_router)
+app.include_router(data_status_router)
 
 
 if __name__ == "__main__":

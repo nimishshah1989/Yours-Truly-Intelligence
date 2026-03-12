@@ -109,17 +109,17 @@ function MenuDashboard() {
         {loadingBcg ? (
           <div className="lg:col-span-2"><ChartSkeleton height="h-[400px]" /></div>
         ) : (
-          <ChartCard title="BCG Matrix — Menu Engineering" className="lg:col-span-2">
+          <ChartCard title="BCG Matrix — Popularity vs Revenue" className="lg:col-span-2">
             <QuadrantChartWidget
               data={bcgRows}
               config={{
                 xKey: "popularity",
-                yKey: "profitability",
+                yKey: "revenue_pct",
                 nameKey: "name",
                 sizeKey: "revenue",
                 xLabel: "Popularity (qty sold)",
-                yLabel: "Profitability (margin %)",
-                quadrantLabels: { topLeft: "Puzzles", topRight: "Stars", bottomLeft: "Dogs", bottomRight: "Plowhorses" },
+                yLabel: "Revenue Contribution (%)",
+                quadrantLabels: { topLeft: "Premium", topRight: "Stars", bottomLeft: "Dogs", bottomRight: "Drivers" },
               }}
             />
           </ChartCard>

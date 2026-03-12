@@ -183,3 +183,31 @@ class PetPoojaClient:
 
         logger.info("Fetched menu for restaurant=%s", self._restaurant.id)
         return body
+
+    def get_inventory(self, target_date: date) -> Dict[str, Any]:
+        """Fetch raw material inventory snapshot for a given date.
+
+        NOTE: This endpoint is not yet confirmed with PetPooja support.
+        The real endpoint is expected to follow the pattern:
+            POST https://api.petpooja.com/V1/thirdparty/get_raw_material_stock/
+        with the same app_key / app_secret / access_token / restID credentials
+        as the orders endpoint, plus a 'stock_date' field.
+
+        The response is expected to return a list of raw materials with
+        opening stock, consumed quantity, and closing stock per ingredient.
+
+        Contact PetPooja support to confirm the exact endpoint URL,
+        request parameters, and response schema before implementing.
+
+        Raises PetPoojaError unconditionally until the endpoint is confirmed.
+        """
+        logger.warning(
+            "PetPooja inventory API called for restaurant=%s date=%s — "
+            "endpoint not yet configured. Contact PetPooja support.",
+            self._restaurant.id,
+            target_date,
+        )
+        raise PetPoojaError(
+            "Inventory API endpoint not yet configured. "
+            "Contact PetPooja support for the raw material stock endpoint."
+        )

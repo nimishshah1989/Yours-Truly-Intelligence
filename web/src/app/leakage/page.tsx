@@ -16,6 +16,7 @@ import {
   useDiscountAbuse, usePlatformCommissionImpact, usePeakHourLeakage,
 } from "@/hooks/use-leakage";
 import type { StatCardData } from "@/lib/types";
+import { AlertCircle } from "lucide-react";
 
 /* Skeleton helpers */
 function ChartSkeleton({ h }: { h?: string }) {
@@ -38,6 +39,17 @@ function StatCardSkeleton() {
   );
 }
 
+/* NA placeholder for sections with no data */
+function NotAvailable({ reason }: { reason: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-2 py-10 text-center">
+      <AlertCircle className="h-8 w-8 text-slate-300" />
+      <p className="text-sm font-medium text-slate-500">Data Not Available</p>
+      <p className="text-xs text-slate-400 max-w-xs">{reason}</p>
+    </div>
+  );
+}
+
 /* Row 1 -- Stat cards */
 function LeakageStatCards() {
   const { data: hmData, isLoading: hmL } = useCancellationHeatmap();
@@ -51,13 +63,12 @@ function LeakageStatCards() {
       </div>
     );
   }
-  // Leakage endpoints now return data directly (not wrapped in {data: ...})
   const hm = hmData as { cancellation_rate: number };
   const shrinkRows = (Array.isArray(shData) ? shData : []) as { shrinkage: number }[];
   const commRows = (Array.isArray(cmData) ? cmData : []) as { commission: number }[];
   const cards: StatCardData[] = [
     { label: "Cancellation Rate", value: `${(hm.cancellation_rate ?? 0).toFixed(1)}%`, changeLabel: "of total orders" },
-    { label: "Total Shrinkage Value", value: formatPrice(shrinkRows.reduce((s, r) => s + r.shrinkage, 0)), changeLabel: "theoretical vs actual gap" },
+    { label: "Total Shrinkage Value", value: shrinkRows.length > 0 ? formatPrice(shrinkRows.reduce((s, r) => s + r.shrinkage, 0)) : "N/A", changeLabel: "inventory data not available" },
     { label: "Commission Leakage", value: formatPrice(commRows.reduce((s, r) => s + r.commission, 0)), changeLabel: "platform commissions paid" },
   ];
   return (
@@ -72,11 +83,17 @@ function CancellationHeatmap() {
   const { data, isLoading } = useCancellationHeatmap();
   if (isLoading || !data) return <ChartSkeleton h="h-[340px]" />;
   const heatmap = data as { cells: { x: string | number; y: string | number; value: number }[]; max_value: number };
+
+  const hasCells = (heatmap.cells ?? []).length > 0;
   return (
     <Card className="rounded-xl border-slate-200">
-      <CardHeader><CardTitle className="text-base text-slate-800">Cancellation Heatmap (Time x Reason)</CardTitle></CardHeader>
+      <CardHeader><CardTitle className="text-base text-slate-800">Cancellation Heatmap (Time × Reason)</CardTitle></CardHeader>
       <CardContent>
-        <HeatmapWidget data={heatmap as unknown as Record<string, unknown>} config={{ colorScale: CHART_COLOR.rose }} />
+        {hasCells ? (
+          <HeatmapWidget data={heatmap as unknown as Record<string, unknown>} config={{ colorScale: CHART_COLOR.rose }} />
+        ) : (
+          <NotAvailable reason="Only 3 cancelled orders detected in the database. Insufficient data to build a meaningful heatmap." />
+        )}
       </CardContent>
     </Card>
   );
@@ -89,6 +106,16 @@ function PlatformCommissionChart() {
   const platforms = (data as { platform: string; gross: number; net: number }[]).map((p) => ({
     platform: PLATFORM_LABELS[p.platform] ?? p.platform, gross: p.gross, net: p.net,
   }));
+
+  if (platforms.length === 0) {
+    return (
+      <Card className="rounded-xl border-slate-200">
+        <CardHeader><CardTitle className="text-base text-slate-800">Platform Commission Impact</CardTitle></CardHeader>
+        <CardContent><NotAvailable reason="No platform commission data. YoursTruly operates direct orders only — no aggregator commissions to report." /></CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card className="rounded-xl border-slate-200">
       <CardHeader><CardTitle className="text-base text-slate-800">Platform Commission Impact</CardTitle></CardHeader>
@@ -113,21 +140,25 @@ function VoidAnomaliesTable() {
   const { data, isLoading } = useVoidAnomalies();
   if (isLoading || !data) return <ChartSkeleton h="h-[260px]" />;
   const staffList = (data as { staff: { staff_name: string; total_items: number; void_items: number; void_rate: number; is_anomaly: boolean }[] }).staff ?? [];
-  const rows = staffList
-    .map((r) => ({ ...r, _rowClass: r.is_anomaly ? "bg-red-50 text-red-700 font-medium" : "" }));
+  const hasData = staffList.length > 0 && staffList.some((r) => r.staff_name && r.staff_name !== "Unknown");
+
   return (
     <Card className="rounded-xl border-slate-200">
       <CardHeader><CardTitle className="text-base text-slate-800">Void / Modify Anomalies</CardTitle></CardHeader>
       <CardContent>
-        <TableWidget
-          data={rows as unknown as Record<string, unknown>[]}
-          config={{ columns: [
-            { key: "staff_name", label: "Staff", format: "text" },
-            { key: "total_items", label: "Total Items", format: "number" },
-            { key: "void_items", label: "Void Items", format: "number" },
-            { key: "void_rate", label: "Void Rate", format: "percent" },
-          ] }}
-        />
+        {hasData ? (
+          <TableWidget
+            data={staffList.map((r) => ({ ...r, _rowClass: r.is_anomaly ? "bg-red-50 text-red-700 font-medium" : "" })) as unknown as Record<string, unknown>[]}
+            config={{ columns: [
+              { key: "staff_name", label: "Staff", format: "text" },
+              { key: "total_items", label: "Total Items", format: "number" },
+              { key: "void_items", label: "Void Items", format: "number" },
+              { key: "void_rate", label: "Void Rate", format: "percent" },
+            ] }}
+          />
+        ) : (
+          <NotAvailable reason="Staff names are not captured from the PetPooja orders API. Void/modify analysis by staff is unavailable until staff assignment data is configured in PetPooja." />
+        )}
       </CardContent>
     </Card>
   );
@@ -138,21 +169,25 @@ function DiscountAbuseTable() {
   const { data, isLoading } = useDiscountAbuse();
   if (isLoading || !data) return <ChartSkeleton h="h-[260px]" />;
   const staffList = (data as { staff: { staff_name: string; discount_count: number; frequency: number; avg_discount: number; is_anomaly: boolean }[] }).staff ?? [];
-  const rows = staffList
-    .map((r) => ({ ...r, _rowClass: r.is_anomaly ? "bg-red-50 text-red-700 font-medium" : "" }));
+  const hasData = staffList.length > 0 && staffList.some((r) => r.staff_name && r.staff_name !== "Unknown");
+
   return (
     <Card className="rounded-xl border-slate-200">
       <CardHeader><CardTitle className="text-base text-slate-800">Discount Abuse Radar</CardTitle></CardHeader>
       <CardContent>
-        <TableWidget
-          data={rows as unknown as Record<string, unknown>[]}
-          config={{ columns: [
-            { key: "staff_name", label: "Staff", format: "text" },
-            { key: "discount_count", label: "Discounts", format: "number" },
-            { key: "frequency", label: "Frequency", format: "percent" },
-            { key: "avg_discount", label: "Avg Discount", format: "currency" },
-          ] }}
-        />
+        {hasData ? (
+          <TableWidget
+            data={staffList.map((r) => ({ ...r, _rowClass: r.is_anomaly ? "bg-red-50 text-red-700 font-medium" : "" })) as unknown as Record<string, unknown>[]}
+            config={{ columns: [
+              { key: "staff_name", label: "Staff", format: "text" },
+              { key: "discount_count", label: "Discounts", format: "number" },
+              { key: "frequency", label: "Frequency", format: "percent" },
+              { key: "avg_discount", label: "Avg Discount", format: "currency" },
+            ] }}
+          />
+        ) : (
+          <NotAvailable reason="Staff names are not captured from the PetPooja orders API. Discount abuse analysis by staff is unavailable until staff assignment data is configured." />
+        )}
       </CardContent>
     </Card>
   );
@@ -171,16 +206,20 @@ function PeakHourLeakageChart() {
     <Card className="rounded-xl border-slate-200">
       <CardHeader><CardTitle className="text-base text-slate-800">Peak Hour Revenue Leakage</CardTitle></CardHeader>
       <CardContent>
-        <BarChartWidget
-          data={barData as unknown as Record<string, unknown>[]}
-          config={{
-            xKey: "hour", currency: true,
-            bars: [
-              { key: "actual_revenue", name: "Actual", color: CHART_COLOR.teal },
-              { key: "potential_revenue", name: "Potential", color: CHART_COLOR.amber },
-            ],
-          }}
-        />
+        {barData.length > 0 ? (
+          <BarChartWidget
+            data={barData as unknown as Record<string, unknown>[]}
+            config={{
+              xKey: "hour", currency: true,
+              bars: [
+                { key: "actual_revenue", name: "Actual", color: CHART_COLOR.teal },
+                { key: "potential_revenue", name: "Potential", color: CHART_COLOR.amber },
+              ],
+            }}
+          />
+        ) : (
+          <NotAvailable reason="No hourly revenue data available for this period." />
+        )}
       </CardContent>
     </Card>
   );
@@ -190,20 +229,26 @@ function PeakHourLeakageChart() {
 function InventoryShrinkageTable() {
   const { data, isLoading } = useInventoryShrinkage();
   if (isLoading || !data) return <ChartSkeleton h="h-[260px]" />;
+  const rows = Array.isArray(data) ? data : [];
+
   return (
     <Card className="rounded-xl border-slate-200">
       <CardHeader><CardTitle className="text-base text-slate-800">Inventory Shrinkage</CardTitle></CardHeader>
       <CardContent>
-        <TableWidget
-          data={data as unknown as Record<string, unknown>[]}
-          config={{ columns: [
-            { key: "item_name", label: "Item", format: "text" },
-            { key: "theoretical", label: "Theoretical", format: "number" },
-            { key: "actual", label: "Actual", format: "number" },
-            { key: "shrinkage", label: "Shrinkage", format: "number" },
-            { key: "shrinkage_pct", label: "Shrinkage %", format: "percent" },
-          ] }}
-        />
+        {rows.length > 0 ? (
+          <TableWidget
+            data={data as unknown as Record<string, unknown>[]}
+            config={{ columns: [
+              { key: "item_name", label: "Item", format: "text" },
+              { key: "theoretical", label: "Theoretical", format: "number" },
+              { key: "actual", label: "Actual", format: "number" },
+              { key: "shrinkage", label: "Shrinkage", format: "number" },
+              { key: "shrinkage_pct", label: "Shrinkage %", format: "percent" },
+            ] }}
+          />
+        ) : (
+          <NotAvailable reason="Inventory snapshot data is not available. PetPooja inventory API endpoint needs to be configured. Contact PetPooja support for the raw material stock API." />
+        )}
       </CardContent>
     </Card>
   );

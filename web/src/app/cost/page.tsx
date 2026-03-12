@@ -17,11 +17,19 @@ import {
 } from "@/hooks/use-cost";
 import type { StatCardData } from "@/lib/types";
 
-interface CogsTrendRow { date: string; cogs: number; revenue: number; cogs_pct: number }
+// ---------------------------------------------------------------------------
+// Local types
+// ---------------------------------------------------------------------------
+
+interface CogsDayRow { date: string; cogs: number; revenue: number; cogs_pct: number }
 interface PurchaseCalRow { date: string; total_spend: number; vendor_count: number; orders: number }
 interface VendorCreepData { items: string[]; data: Record<string, unknown>[] }
 
-function deriveStats(cogs: CogsTrendRow[] | undefined, purch: PurchaseCalRow[] | undefined): StatCardData[] {
+// ---------------------------------------------------------------------------
+// Stats derived from loaded data
+// ---------------------------------------------------------------------------
+
+function deriveStats(cogs: CogsDayRow[] | undefined, purch: PurchaseCalRow[] | undefined): StatCardData[] {
   if (!cogs?.length) return [];
   const cogsTotal = cogs.reduce((s, r) => s + r.cogs, 0);
   const revTotal = cogs.reduce((s, r) => s + r.revenue, 0);
@@ -34,6 +42,10 @@ function deriveStats(cogs: CogsTrendRow[] | undefined, purch: PurchaseCalRow[] |
     { label: "Purchase Spend", value: formatPrice(spend), changeLabel: purch ? `${purch.length} purchase days` : undefined },
   ];
 }
+
+// ---------------------------------------------------------------------------
+// Skeleton helpers
+// ---------------------------------------------------------------------------
 
 function StatSkeleton() {
   return (
@@ -48,6 +60,10 @@ function StatSkeleton() {
 function ChartSkeleton({ className }: { className?: string }) {
   return <Skeleton className={`h-[340px] rounded-xl bg-slate-100 ${className ?? ""}`} />;
 }
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
 
 export default function CostPage() {
   return (
@@ -65,12 +81,13 @@ function CostDashboard() {
   const { data: waterfallRaw } = useMarginWaterfall();
   const { data: volatilityRaw } = useIngredientVolatility();
 
-  const cogsTrend = cogsTrendRaw as CogsTrendRow[] | undefined;
+  // Unwrap the { data: [...] } wrapper that all these endpoints return
+  const cogsTrend = cogsTrendRaw?.data as CogsDayRow[] | undefined;
   const vendorCreep = vendorCreepRaw as VendorCreepData | undefined;
-  const foodCostGap = foodCostGapRaw as Record<string, unknown>[] | undefined;
-  const purchaseCal = purchaseCalRaw as PurchaseCalRow[] | undefined;
-  const waterfall = waterfallRaw as Record<string, unknown>[] | undefined;
-  const volatility = volatilityRaw as Record<string, unknown>[] | undefined;
+  const foodCostGap = foodCostGapRaw?.data as Record<string, unknown>[] | undefined;
+  const purchaseCal = purchaseCalRaw?.data as PurchaseCalRow[] | undefined;
+  const waterfall = waterfallRaw?.data as Record<string, unknown>[] | undefined;
+  const volatility = volatilityRaw?.data as Record<string, unknown>[] | undefined;
 
   const stats = useMemo(() => deriveStats(cogsTrend, purchaseCal), [cogsTrend, purchaseCal]);
   const vendorLines = useMemo(
@@ -138,7 +155,9 @@ function CostDashboard() {
       <div className="mt-6">
         <Card className="rounded-xl border-slate-200">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base font-semibold text-slate-800">Margin Waterfall</CardTitle>
+            <CardTitle className="text-base font-semibold text-slate-800">
+              Margin Waterfall — Revenue to Net Margin
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {waterfall ? (

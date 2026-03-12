@@ -141,10 +141,26 @@ export function NetworkGraphWidget({ data }: NetworkGraphProps) {
 
   const WIDTH = 600;
   const HEIGHT = 400;
+  const TOP_EDGES = 25;
 
-  const positioned = useMemo(() => runForceLayout(nodes, edges, WIDTH, HEIGHT), [nodes, edges]);
+  // Limit to top edges by weight to avoid hairball with many menu items
+  const visibleEdges = useMemo(
+    () => [...edges].sort((a, b) => b.weight - a.weight).slice(0, TOP_EDGES),
+    [edges],
+  );
+  const visibleNodeIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const e of visibleEdges) { ids.add(e.source); ids.add(e.target); }
+    return ids;
+  }, [visibleEdges]);
+  const visibleNodes = useMemo(
+    () => (visibleNodeIds.size > 0 ? nodes.filter((n) => visibleNodeIds.has(n.id)) : nodes.slice(0, 30)),
+    [nodes, visibleNodeIds],
+  );
+
+  const positioned = useMemo(() => runForceLayout(visibleNodes, visibleEdges, WIDTH, HEIGHT), [visibleNodes, visibleEdges]);
   const nodeMap = useMemo(() => new Map(positioned.map((n) => [n.id, n])), [positioned]);
-  const maxWeight = useMemo(() => Math.max(...edges.map((e) => e.weight), 1), [edges]);
+  const maxWeight = useMemo(() => Math.max(...visibleEdges.map((e) => e.weight), 1), [visibleEdges]);
 
   const handleMouseEnter = useCallback(
     (node: PositionedNode, event: React.MouseEvent<SVGCircleElement>) => {
@@ -180,8 +196,8 @@ export function NetworkGraphWidget({ data }: NetworkGraphProps) {
       )}
 
       <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="h-auto w-full" preserveAspectRatio="xMidYMid meet">
-        {/* Edges */}
-        {edges.map((edge, i) => {
+        {/* Edges — filtered to top 25 by weight */}
+        {visibleEdges.map((edge, i) => {
           const source = nodeMap.get(edge.source);
           const target = nodeMap.get(edge.target);
           if (!source || !target) return null;
