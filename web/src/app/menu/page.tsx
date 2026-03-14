@@ -19,7 +19,12 @@ import { useTopItems, useBcgMatrix, useAffinity, useCategoryMix, useDeadSkus } f
 // ---------------------------------------------------------------------------
 
 interface TopItemRow { name: string; category: string; revenue: number; quantity: number }
-interface TopItemsResponse { by_revenue: TopItemRow[]; by_quantity: TopItemRow[] }
+interface TopItemsResponse {
+  by_revenue: TopItemRow[];
+  by_quantity: TopItemRow[];
+  total_unique: number;
+  total_quantity: number;
+}
 
 // ---------------------------------------------------------------------------
 // Chart wrapper — removes repeated Card/Header boilerplate
@@ -53,12 +58,9 @@ function MenuDashboard() {
   const deadSkuRows = (deadSkus as Record<string, unknown>[] | undefined) ?? [];
   const affinityGraph = affinityData as Record<string, unknown> | undefined;
 
-  // Stat values derived from top items
-  const totalSold = useMemo(() => {
-    return (top?.by_quantity ?? []).reduce((sum, item) => sum + item.quantity, 0);
-  }, [top]);
-
-  const uniqueItems = useMemo(() => (top?.by_revenue ?? []).length, [top]);
+  // Stat values from backend (total_unique covers ALL items, not just top N)
+  const totalSold = top?.total_quantity ?? 0;
+  const uniqueItems = top?.total_unique ?? 0;
 
   // Category names for the line chart — exclude the xKey
   const categoryLines = useMemo(() => {
@@ -90,14 +92,20 @@ function MenuDashboard() {
           <>
             <ChartCard title="Top Items by Revenue">
               <BarChartWidget
-                data={(top?.by_revenue ?? []).slice(0, 10) as unknown as Record<string, unknown>[]}
-                config={{ xKey: "name", bars: [{ key: "revenue", name: "Revenue" }], currency: true }}
+                data={(top?.by_revenue ?? []).slice(0, 10).map((item) => ({
+                  ...item,
+                  name: item.name.length > 18 ? item.name.slice(0, 16) + "…" : item.name,
+                })) as unknown as Record<string, unknown>[]}
+                config={{ xKey: "name", bars: [{ key: "revenue", name: "Revenue" }], currency: true, rotateLabels: true }}
               />
             </ChartCard>
             <ChartCard title="Top Items by Quantity">
               <BarChartWidget
-                data={(top?.by_quantity ?? []).slice(0, 10) as unknown as Record<string, unknown>[]}
-                config={{ xKey: "name", bars: [{ key: "quantity", name: "Qty Sold" }] }}
+                data={(top?.by_quantity ?? []).slice(0, 10).map((item) => ({
+                  ...item,
+                  name: item.name.length > 18 ? item.name.slice(0, 16) + "…" : item.name,
+                })) as unknown as Record<string, unknown>[]}
+                config={{ xKey: "name", bars: [{ key: "quantity", name: "Qty Sold" }], rotateLabels: true }}
               />
             </ChartCard>
           </>

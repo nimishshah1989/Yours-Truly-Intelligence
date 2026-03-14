@@ -68,6 +68,16 @@ function formatCellValue(value: number, currency: boolean): string {
   return value.toLocaleString("en-IN");
 }
 
+/** Format hour number to readable label: 0 → "12a", 13 → "1p" */
+function formatHourLabel(hour: string): string {
+  const h = Number(hour);
+  if (isNaN(h)) return hour;
+  if (h === 0) return "12a";
+  if (h < 12) return `${h}a`;
+  if (h === 12) return "12p";
+  return `${h - 12}p`;
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -79,16 +89,25 @@ export function HeatmapWidget({ data, config }: HeatmapWidgetProps) {
   const color = config?.colorScale ?? CHART_COLOR.teal;
   const currency = config?.currency ?? false;
 
-  // Derive labels from data if not provided
+  // Canonical day ordering for heatmaps
+  const DAY_ORDER = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+  // Derive labels from data if not provided, with proper ordering
   const xLabels = useMemo(() => {
     if (config?.xLabels?.length) return config.xLabels;
     const unique = [...new Set(cells.map((c) => String(c.x)))];
+    // If values look numeric (hours), sort numerically
+    const allNumeric = unique.every((v) => !isNaN(Number(v)));
+    if (allNumeric) return unique.sort((a, b) => Number(a) - Number(b));
     return unique;
   }, [cells, config?.xLabels]);
 
   const yLabels = useMemo(() => {
     if (config?.yLabels?.length) return config.yLabels;
     const unique = [...new Set(cells.map((c) => String(c.y)))];
+    // If values are day names, sort by canonical day order
+    const isDays = unique.every((v) => DAY_ORDER.includes(v));
+    if (isDays) return DAY_ORDER.filter((d) => unique.includes(d));
     return unique;
   }, [cells, config?.yLabels]);
 
@@ -154,14 +173,18 @@ export function HeatmapWidget({ data, config }: HeatmapWidgetProps) {
         <div />
 
         {/* Column headers */}
-        {xLabels.map((label) => (
-          <div
-            key={`col-${label}`}
-            className="sticky top-0 z-10 bg-white px-1 py-2 text-center text-xs font-medium text-slate-500 truncate"
-          >
-            {label}
-          </div>
-        ))}
+        {xLabels.map((label) => {
+          const allNumeric = xLabels.every((v) => !isNaN(Number(v)));
+          const displayLabel = allNumeric ? formatHourLabel(label) : label;
+          return (
+            <div
+              key={`col-${label}`}
+              className="sticky top-0 z-10 bg-white px-1 py-2 text-center text-xs font-medium text-slate-500 truncate"
+            >
+              {displayLabel}
+            </div>
+          );
+        })}
 
         {/* Rows */}
         {yLabels.map((yLabel) => (

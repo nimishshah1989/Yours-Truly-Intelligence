@@ -1,398 +1,269 @@
-# YoursTruly Intelligence Platform (YTIP)
-
-## What This Is
-A deep analytics and AI-powered intelligence platform for YoursTruly Café. Ingests all operational data from PetPooja POS into PostgreSQL, surfaces it through rich pre-built dashboards with second/third-degree insights, a Claude-powered conversational interface for ad-hoc exploration, and automated daily/weekly/monthly management alerts. Hosted on AWS EC2 Mumbai + RDS.
-
-**Design philosophy:** Don't just show data — reveal what's hidden between the lines. Every visualization should surface non-obvious patterns that drive action.
+# CLAUDE.md — YoursTruly Intelligence Platform (YTIP)
+## Version 4.0 — Updated March 2026 (reflects actual deployed stack)
 
 ---
 
-## Architecture
+## Project Identity
 
-### Two-Layer Intelligence
-1. **Pre-built Dashboard Layer** — Rich, interactive, deep-insight dashboards across 6 modules. Designed by us, powered by SQL queries, rendered with Recharts. Always available, always fresh.
-2. **AI Conversational Layer** — Claude agent with database tools. Owner types anything in plain English → gets answers, charts, saved dashboards, alerts. For ad-hoc exploration beyond pre-built views.
+**Project:** YoursTruly Intelligence Platform (YTIP)
+**Client:** YoursTruly Café + YTC Roastery, 1 Ray Street, Kolkata 700020
+**Purpose:** Transform PetPooja POS + Tally accounting data into AI-powered business intelligence. Proactive insights, NL queries, leakage detection, full P&L across two legal entities.
 
-### System Components
+---
+
+## Actual Stack (what is deployed and running)
+
+| Layer | Technology | Details |
+|---|---|---|
+| Backend | FastAPI + SQLAlchemy + PostgreSQL | EC2 Mumbai, port 8001, Docker |
+| Database | PostgreSQL on EC2 | SQLAlchemy ORM, psycopg2 driver |
+| Frontend | Next.js 14 (App Router) | Vercel, `web/` directory |
+| AI | Claude API (`claude-sonnet-4-5-20241022`) | NL queries, digests, chat |
+| ETL (Tally) | lxml iterparse streaming | UTF-16 XML, ~90MB files |
+| Notifications | Resend (email) | WhatsApp stubbed for Phase 5 |
+| Auth | API key middleware | `X-API-Key` header required |
+
+**Non-negotiable rules:**
+- Backend = FastAPI + SQLAlchemy. Never supabase-py. Never Flask.
+- Frontend = Next.js in `web/`. Never create a separate `frontend/` directory.
+- Database = PostgreSQL on EC2. Never add Supabase as an extra service.
+- AI model = read from env var. Default: `claude-sonnet-4-5-20241022`.
+- Port on EC2 host = **8001** (Docker internal = 8000). Never use 8002.
+
+---
+
+## Infrastructure
+
+| Component | Details |
+|---|---|
+| EC2 | 13.206.50.251, Mumbai ap-south-1, 911MB RAM + 512MB swap |
+| Docker | Container: `ytip-backend`, port mapping `8001:8000` |
+| Vercel | `web/` auto-deploys on push to main |
+| Deploy script | `./deploy.sh` in project root |
+
+**EC2 RAM constraint:** Stop other containers before `docker build`. 911MB is tight.
+
+---
+
+## Two-Entity Architecture
+
+| | YTC Café | YTC Roastery |
+|---|---|---|
+| GSTIN | 19AADFY7521R2ZA | 19AADFY7521R1ZB |
+| Tally Prefix | YTC/2526/ | YTCRL/2526/ |
+| Revenue Source | PetPooja POS (dine-in only) | B2B wholesale coffee (Tally only) |
+| POS RestID | 34cn0ieb1f | No POS |
+
+All API routes take `?restaurant_id=N` or use the `X-Restaurant-ID` header.
+**Production restaurant_id = 5** (IDs 1-4 consumed by failed seed attempts).
+
+---
+
+## Project Structure
+
 ```
-┌─────────────────────────────────────────────────┐
-│  FRONTEND — Next.js 16 (App Router)             │
-│  Pre-built Dashboards + Chat Interface          │
-│  Widget Renderer (stat/line/bar/pie/heatmap/    │
-│  matrix/waterfall/table/sankey)                 │
-└─────────────────┬───────────────────────────────┘
-                  │ HTTPS
-┌─────────────────▼───────────────────────────────┐
-│  BACKEND — FastAPI (EC2 Mumbai)                  │
-│  ┌────────────┐ ┌──────────────┐ ┌───────────┐  │
-│  │ Dashboard  │ │ Claude Agent │ │ Scheduler │  │
-│  │ API Routes │ │ (Tool Use)   │ │ (Alerts/  │  │
-│  │ (pre-built)│ │              │ │  Digests) │  │
-│  └─────┬──────┘ └──────┬───────┘ └─────┬─────┘  │
-│        └────────┬──────┘───────────────┘         │
-│          ┌──────▼──────────────────────────┐     │
-│          │ Services + ETL + Analytics      │     │
-│          └──────┬──────────────────────────┘     │
-└─────────────────┼───────────────────────────────┘
-           ┌──────▼──────┐     ┌──────────────┐
-           │ PostgreSQL  │     │  Claude API   │
-           │ RDS Mumbai  │     │  (Sonnet 4.6) │
-           │ DB: ytip    │     └──────────────┘
-           └─────────────┘
-```
-
-### Backend (Python/FastAPI)
-```
-backend/
-  main.py                    — App setup, CORS, router mounting (< 200 lines)
-  config.py                  — All env vars, settings
-  models.py                  — ALL SQLAlchemy models (single source of truth)
-  database.py                — RDS PostgreSQL connection, get_db, read-only pool
-  seed_data.py               — 90-day realistic mock data generator
-
-  routers/
-    revenue.py               — Revenue Intelligence endpoints
-    menu.py                  — Menu Engineering endpoints
-    cost.py                  — Cost & Margin endpoints
-    leakage.py               — Leakage & Loss Detection endpoints
-    customers.py             — Customer Intelligence endpoints
-    operations.py            — Operational Efficiency endpoints
-    chat.py                  — Claude agent chat endpoint
-    dashboards.py            — Saved dashboard CRUD
-    alerts.py                — Alert rule CRUD + history
-    digests.py               — Digest list/view
-    sync.py                  — Sync trigger/status
-    health.py                — Health check
-
-  agent/
-    agent.py                 — Claude tool-use orchestration loop
-    tools.py                 — Tool definitions + implementations
-    system_prompt.py         — Schema + café context builder
-    widget_schema.py         — Widget Pydantic models
-
-  services/
-    analytics_service.py     — Shared period filters, query builders
-    menu_engineering.py      — BCG matrix, affinity, cannibalization
-    leakage_service.py       — Void analysis, shrinkage, discount abuse
-    customer_service.py      — RFM, cohorts, LTV, churn
-    dashboard_service.py     — Refresh saved dashboards (re-run queries)
-    alert_service.py         — Evaluate alert conditions, send notifications
-    digest_service.py        — Generate daily/weekly/monthly digests via Claude
-    notification_service.py  — Email delivery (Resend)
-    summary_service.py       — Pre-compute daily_summary
-
-  etl/
-    petpooja_client.py       — PetPooja API client (stubbed for mock phase)
-    transformer.py           — Data normalization / validation
-    scheduler.py             — APScheduler: sync + alerts + digests
-```
-
-### Frontend (Next.js 16 / App Router)
-```
-web/src/
-  app/
-    layout.tsx               — Root layout: sidebar + persistent chat drawer
-    page.tsx                 — Home: executive summary + pinned dashboards
-    revenue/page.tsx         — Revenue Intelligence (7 visualizations)
-    menu/page.tsx            — Menu Engineering (7 visualizations)
-    cost/page.tsx            — Cost & Margin (6 visualizations)
-    leakage/page.tsx         — Leakage & Loss Detection (6 visualizations)
-    customers/page.tsx       — Customer Intelligence (6 visualizations)
-    operations/page.tsx      — Operational Efficiency (5 visualizations)
-    chat/page.tsx            — Full-screen AI chat
-    dashboards/
-      page.tsx               — Saved dashboard library
-      [id]/page.tsx          — View saved dashboard (live data refresh)
-    alerts/page.tsx          — Alert rules + history
-    digests/page.tsx         — Digest archive
-
-  components/
-    ui/                      — shadcn/ui primitives (DO NOT MODIFY)
-    layout/
-      sidebar.tsx            — Navigation sidebar
-      chat-drawer.tsx        — Persistent chat panel (right side, collapsible)
-      period-selector.tsx    — Time period dropdown (today/7d/30d/mtd/custom)
-      page-header.tsx        — Page title + period selector + actions
-
-    widgets/                 — UNIVERSAL WIDGET SYSTEM
-      widget-renderer.tsx    — Routes widget type → component
-      stat-card.tsx          — KPI card with sparkline + trend badge
-      line-chart.tsx         — Time series (Recharts)
-      bar-chart.tsx          — Comparisons, grouped, stacked
-      pie-chart.tsx          — Proportions
-      heatmap.tsx            — Day × Hour matrix, category × time
-      quadrant-chart.tsx     — BCG/menu engineering matrix
-      waterfall-chart.tsx    — Margin waterfall, flow breakdown
-      table-widget.tsx       — Tanstack Table for data grids
-      network-graph.tsx      — Item affinity / co-occurrence
-      gauge.tsx              — Real-time progress gauge
-      pareto-chart.tsx       — 80/20 analysis (bar + cumulative line)
-      cohort-table.tsx       — Retention matrix (triangular)
-      scatter-plot.tsx       — Multi-variable analysis
-
-    chat/
-      chat-input.tsx         — Message input + suggestion chips
-      chat-message.tsx       — Text + rendered widgets
-      suggestion-chips.tsx   — Follow-up prompts
-
-    dashboard/
-      dashboard-grid.tsx     — Renders saved dashboard layout
-      dashboard-card.tsx     — Library card with preview
-
-    alerts/
-      alert-card.tsx         — Alert rule display
-      alert-history.tsx      — When alerts fired
-
-  hooks/
-    use-revenue.ts           — Revenue data SWR
-    use-menu.ts              — Menu engineering SWR
-    use-cost.ts              — Cost & margin SWR
-    use-leakage.ts           — Leakage data SWR
-    use-customers.ts         — Customer data SWR
-    use-operations.ts        — Operations data SWR
-    use-chat.ts              — Chat state + streaming
-    use-dashboards.ts        — Saved dashboards SWR
-    use-alerts.ts            — Alert rules SWR
-    use-period.ts            — Shared period state across all pages
-
-  lib/
-    api.ts                   — API client (fetch wrapper, base URL)
-    types.ts                 — All TypeScript types (widgets, chat, models)
-    constants.ts             — Colors, chart palettes, category maps
-    utils.ts                 — formatPrice (Indian), formatDate, formatPercent
-    chart-config.ts          — Recharts defaults, color scales
+yourstruly-intelligence/
+├── CLAUDE.md
+├── deploy.sh
+├── docker-compose.yml
+│
+├── backend/
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   ├── main.py                  ← FastAPI app + middleware + all routers
+│   ├── config.py                ← pydantic-settings (reads .env)
+│   ├── database.py              ← SQLAlchemy engine + get_db() / get_readonly_db()
+│   ├── models.py                ← all SQLAlchemy ORM models
+│   ├── dependencies.py          ← shared FastAPI deps (restaurant_id, period_range)
+│   ├── seed_data.py
+│   │
+│   ├── etl/
+│   │   ├── petpooja_client.py   ← all PetPooja API calls
+│   │   ├── tally_parser.py      ← UTF-16 XML → normalised vouchers
+│   │   ├── etl_orders.py
+│   │   ├── etl_tally.py
+│   │   ├── etl_inventory.py     ← stub (PetPooja inventory API not yet configured)
+│   │   ├── etl_menu.py
+│   │   └── scheduler.py         ← APScheduler cron jobs
+│   │
+│   ├── services/
+│   │   ├── analytics_service.py ← shared helpers (IST, period resolution)
+│   │   ├── revenue_service.py
+│   │   ├── menu_engineering.py  ← BCG matrix, affinity, dead SKUs
+│   │   ├── pl_engine.py         ← P&L from Tally + expense categorisation
+│   │   ├── alert_service.py
+│   │   ├── digest_service.py
+│   │   ├── digest_context.py
+│   │   ├── leakage_service.py
+│   │   ├── customer_service.py
+│   │   ├── reconciliation_service.py
+│   │   ├── summary_service.py
+│   │   ├── data_status_service.py
+│   │   └── notification_service.py
+│   │
+│   ├── routers/
+│   │   ├── health.py            ← GET /api/health (no auth required)
+│   │   ├── restaurants.py
+│   │   ├── revenue.py           ← /api/revenue/*
+│   │   ├── menu.py              ← /api/menu/*
+│   │   ├── cost.py              ← /api/cost/* (P&L waterfall)
+│   │   ├── leakage.py
+│   │   ├── operations.py
+│   │   ├── customers.py
+│   │   ├── home.py              ← /api/home/* (dashboard)
+│   │   ├── chat.py              ← /api/chat (AI assistant)
+│   │   ├── tally.py             ← /api/tally/upload
+│   │   ├── sync.py
+│   │   ├── alerts.py
+│   │   ├── digests.py
+│   │   ├── dashboards.py
+│   │   ├── data_status.py
+│   │   └── reconciliation.py
+│   │
+│   ├── middleware/
+│   │   ├── auth.py              ← X-API-Key check
+│   │   └── rate_limit.py        ← 120 req/min per IP
+│   │
+│   └── agent/
+│       ├── agent.py             ← Claude AI chat
+│       ├── system_prompt.py
+│       ├── tools.py
+│       └── widget_schema.py
+│
+├── web/                         ← Next.js 14 frontend (Vercel)
+│   └── src/
+│       ├── app/                 ← App Router pages
+│       ├── components/          ← shared components + chart widgets
+│       ├── hooks/               ← SWR data hooks
+│       └── lib/                 ← utils, formatters, API client
+│
+└── database/
+    ├── schema.sql
+    └── indexes.sql
 ```
 
 ---
 
-## MANDATORY RULES
+## PetPooja API — Verified Credentials & Rules
 
-### 1. File Size Limits
-- **No file over 300 lines.** Extract into sub-components / helpers.
-- `main.py` stays under 200 lines — orchestrator only.
-- Router files: max 400 lines. Split by sub-domain if growing.
-- Frontend components: max 250 lines. Extract sub-components.
-- Widget components: max 150 lines each (they should be focused).
+### ⚠️ Wrong credentials = silent failures — read carefully
 
-### 2. No Duplicate Logic
-- DB models: ONLY in `models.py`
-- Period/date filtering: ONLY in `analytics_service.py`
-- Claude API calls: ONLY in `agent/`
-- Currency formatting: ONLY in `utils.ts` (`formatPrice()`)
-- API base URL: ONLY from `NEXT_PUBLIC_API_URL`
-- Chart colors: ONLY from `constants.ts`
-- Never create a second source of truth.
+**API 1 — Orders** (`generic_get_orders/`)
+- Cookie: single — `PETPOOJA_API=9e2noc70kveml2pe3nps32sp13`
+- Date field: `order_date` (YYYY-MM-DD). T-1 lag: pass today to get yesterday.
+- Paginate: `refId` = last orderID, 50 per page
 
-### 3. Single Responsibility
-- Each router = one analytics domain
-- Each service = one concern
-- Each widget component = one chart type
-- Each dashboard page = one domain's visualizations
+**API 2 — Menu** (`thirdparty_fetch_dinein_menu`)
+- Header keys use **HYPHENS**: `app-key`, `app-secret`, `access-token`
+- Different credentials from Orders API
 
-### 4. Backend Conventions
-- All endpoints in `routers/` — never add routes to `main.py`
-- Pydantic response models in the router that uses them
-- `Depends(get_db)` for sessions — never create manually
-- Logging: `logger = logging.getLogger("ytip.<module>")`
-- All monetary values: INTEGER in paisa (INR × 100)
-- Read-only DB connection for all chat/Claude-generated queries
+**API 3 — Consumption** (`get_orders_api/`)
+- Uses **inventory credentials** (not orders credentials)
+- `consumed[].price` = PER UNIT. Cost = `quantity × price`. Never just price alone.
 
-### 5. Frontend Conventions
-- Data fetching: SWR hooks in `hooks/` (pattern: `use-<resource>.ts`)
-- API calls: single `api.ts` client in `lib/`
-- State: React useState/useCallback. No global state library.
-- Types: all in `lib/types.ts`
-- Every dashboard page: stat cards row → primary charts → secondary charts → detail table
+**API 4 — Stock** (`get_stock_api/`)
+- Requires **BOTH cookies**: `PETPOOJA_CO=4853nc4r0gu8c93pmr0bq18813; PETPOOJA_API=...`
+- Date field: **`date`** (NOT `order_date`)
 
-### 6. Widget System Convention
-Every visualization (pre-built or Claude-generated) uses the same widget system:
-- Widget type definitions in `lib/types.ts`
-- Widget renderer in `components/widgets/widget-renderer.tsx`
-- Pre-built dashboards compose widgets directly
-- Claude agent returns widget specs → same renderer
-- Saved dashboards store widget specs as JSONB → same renderer
+**API 5 — Purchases** (`get_purchase/`)
+- Requires **BOTH cookies**
+- Date format: **DD-MM-YYYY** (NOT YYYY-MM-DD)
+- Max range: **1 month per call**
+
+**API 6 — Sales/Transfers** (`get_sales/`)
+- Requires **BOTH cookies**
+- `slType` is required: `transfer` | `sale` | `wastage` | `purchase return`
 
 ---
 
-## UI DESIGN SYSTEM — MANDATORY
+## Tally XML
 
-Light professional design. Dense, information-rich, like a Bloomberg terminal for restaurants.
-
-### Key Rules
-- **Light theme ONLY** — page bg `slate-50`, cards `white`
-- **Primary: teal-600** (`#0d9488`) — actions, positive metrics
-- **Font: Inter** — `font-mono tabular-nums` for ALL numbers
-- **Indian number formatting** — `₹1,00,000` (lakhs), `₹1,00,00,000` (crores)
-- **Up = emerald-600, Down = red-600, Warning = amber-500**
-- **Cards: `rounded-xl border border-slate-200 p-5`**
-- **Loading: Skeleton components** — never spinners
-- **Chart palette** (in order): teal-500, blue-500, amber-500, rose-500, violet-500, emerald-500
-
-### Dashboard Page Layout Pattern
-```
-┌─────────────────────────────────────────────────┐
-│ Page Header: Title + Period Selector + Actions   │
-├─────────┬─────────┬─────────┬───────────────────┤
-│ Stat    │ Stat    │ Stat    │ Stat              │
-│ Card    │ Card    │ Card    │ Card              │
-├─────────┴────────┬┴─────────┴───────────────────┤
-│ Primary Chart    │ Primary Chart               │
-│ (large, 2/3)    │ (medium, 1/3)               │
-├──────────────────┴──────────────────────────────┤
-│ Deep Insight Section (2-3 non-obvious charts)    │
-├─────────────────────────────────────────────────┤
-│ Detail Table (drill-down, sortable, filterable)  │
-└─────────────────────────────────────────────────┘
-```
+- Format: UTF-16 LE, "All Masters" export, ~90MB
+- Parser: `lxml iterparse` — never load into memory
+- `POS SALE V2` vouchers = PetPooja daily rolls → **exclude from P&L** (double-count)
+- `YTC Purchase PP` = intercompany → `is_intercompany=True`
+- Amounts in XML are INR floats; stored in DB as paisa (× 100)
 
 ---
 
-## DASHBOARD MODULES (6 Pre-Built)
+## Environment Variables
 
-### 1. Revenue Intelligence (`/revenue`)
-- Revenue overview stat cards (today, WoW Δ, MoM Δ, avg ticket)
-- Revenue trend line (30d)
-- **Revenue Heatmap** — day × hour matrix showing when money is made
-- **Revenue Concentration (Pareto)** — top items = X% of revenue
-- Payment mode breakdown + migration over time
-- **Platform True Profitability** — gross vs net after commissions
-- Discount ROI analysis
-
-### 2. Menu Engineering (`/menu`)
-- Top/bottom items by revenue and quantity
-- **BCG Matrix** — Stars/Dogs/Puzzles/Plowhorses quadrant
-- **Item Affinity Map** — what's ordered together
-- **Cannibalization Detector** — new items stealing from existing
-- Category mix drift over time
-- Modifier attach rate + revenue impact
-- Dead SKU report
-
-### 3. Cost & Margin (`/cost`)
-- COGS as % of revenue trend
-- **Vendor Price Creep** — small multiples showing unit cost over time
-- **Theoretical vs Actual Food Cost** — gap analysis
-- Purchase frequency calendar
-- **Margin Waterfall** — revenue → COGS → commissions → discounts → waste → net
-- Ingredient price volatility
-
-### 4. Leakage & Loss Detection (`/leakage`)
-- **Cancellation Pattern Heatmap** — time × reason
-- **Void/Modify Anomaly** — by staff member (flag outliers)
-- **Inventory Shrinkage** — theoretical vs actual consumption
-- **Discount Abuse Radar** — frequency × amount by staff
-- Platform commission impact
-- Peak-hour revenue leakage (capacity vs actual)
-
-### 5. Customer Intelligence (`/customers`)
-- New vs returning + LTV overview
-- **RFM Segmentation** — Champions/Loyal/At Risk/Lost
-- **Cohort Retention Table** — triangular matrix
-- **Churn Prediction** — regulars who haven't visited recently
-- Customer LTV distribution histogram
-- **Top Customer Dependency** — Pareto curve of revenue concentration
-
-### 6. Operational Efficiency (`/operations`)
-- Revenue per seat-hour heatmap
-- Order fulfillment time distribution
-- Staff efficiency ranking
-- Platform SLA compliance
-- Day-part profitability breakdown
-
----
-
-## AUTOMATED ALERTS
-
-### Daily (9 AM IST)
-- Yesterday revenue vs 7-day rolling avg (flag >15% deviation)
-- Items that hit zero stock
-- Cancellation rate by platform (flag >10%)
-- Unusual void/discount patterns
-- 3 plain-English takeaways
-
-### Weekly (Monday 9 AM IST)
-- Week vs prior week summary
-- Menu matrix changes (items that moved quadrants)
-- Vendor price changes detected
-- Customer churn risk list
-- Platform profitability comparison
-- Top 5 actionable recommendations
-
-### Monthly (1st of month, 9 AM IST)
-- P&L summary: revenue, COGS, commissions, discounts, waste, net margin
-- Menu performance audit
-- Customer retention cohort update
-- Inventory efficiency score
-- Vendor spend analysis + renegotiation signals
-- Strategic recommendations
-
----
-
-## BUILD & DEPLOY
-
-### Local Development
 ```bash
-# Backend
-cd backend && python3 main.py            # Port 8000
+# Database (PostgreSQL on EC2)
+DATABASE_URL=postgresql://ytip_app:PASSWORD@HOST:5432/ytip
+DATABASE_URL_READONLY=postgresql://ytip_app:PASSWORD@HOST:5432/ytip
 
-# Frontend
-cd web && pnpm dev                        # Port 3000
+# Claude AI
+ANTHROPIC_API_KEY=sk-ant-...
 
-# Seed mock data
-cd backend && python3 seed_data.py
-```
+# PetPooja — Orders API
+PETPOOJA_APP_KEY=uvw0th4nksi97o1bgqp35zjxr6e2may8
+PETPOOJA_APP_SECRET=9450cbbbb22be056537e82138f1fa15220656e9b
+PETPOOJA_ACCESS_TOKEN=9949a4aea79acad2e22e501e89c5ff3146f15e48
+PETPOOJA_RESTAURANT_ID=407585
+PETPOOJA_BASE_URL=https://api.petpooja.com/V1/thirdparty
 
-### Pre-Commit Checks
-```bash
-cd web && pnpm run build
-cd backend && python3 -c "import models; import main; print('OK')"
-```
+# PetPooja — Menu API
+PETPOOJA_MENU_APP_KEY=necpbimxzuogtyhr5qf19k63adsw0vj8
+PETPOOJA_MENU_APP_SECRET=cfba0cad2a51d753740984feb9d1caea6d09c1cc
+PETPOOJA_MENU_ACCESS_TOKEN=d0ab024f7351a490d517e52942afac2c759dea07
+PETPOOJA_REST_ID=34cn0ieb1f
+PETPOOJA_COOKIE=PETPOOJA_API=9e2noc70kveml2pe3nps32sp13
 
-### Deployment
-- EC2 Mumbai (same server as FIE v3)
-- Database: RDS PostgreSQL (same instance, DB: `ytip`)
-- Frontend: Vercel or same EC2
+# Auth
+API_KEY=your-secret-api-key
 
-### Environment Variables
-```
-DATABASE_URL=postgresql://user:pass@rds-host:5432/ytip
-ANTHROPIC_API_KEY=your_key
-RESEND_API_KEY=optional
-NOTIFY_EMAILS=owner@yourstruly.in,manager@yourstruly.in
-PETPOOJA_APP_KEY=pending
-PETPOOJA_APP_SECRET=pending
-PETPOOJA_ACCESS_TOKEN=pending
-PETPOOJA_RESTAURANT_ID=pending
-PETPOOJA_BASE_URL=https://api.petpooja.com/v2
-NEXT_PUBLIC_API_URL=http://localhost:8000
-CORS_ORIGINS=http://localhost:3000
+# Notifications
+RESEND_API_KEY=re_...
+NOTIFY_EMAILS=owner@yourstruly.in
+
+# App
+CORS_ORIGINS=http://localhost:3000,https://web-delta-three-37.vercel.app
+TALLY_UPLOAD_DIR=/tmp/tally_uploads
+DEBUG=false
 ```
 
 ---
 
-## IMPLEMENTATION PHASES
+## Coding Standards
 
-### Phase 1: Foundation
-Project scaffolding, DB schema, mock data, app shell, sidebar, period selector.
+### Python
+- SQLAlchemy ORM for all DB access. Sessions via `get_db()` / `get_readonly_db()`.
+- Type hints on all functions. `logging` only — never `print()`.
+- Services do logic; routers do HTTP only. Always `try/except` → `HTTPException(500)`.
 
-### Phase 2: Pre-Built Dashboards (all 6 modules)
-Revenue → Menu → Cost → Leakage → Customers → Operations. Backend analytics queries + frontend visualizations.
+### Frontend (Next.js, `web/`)
+- App Router, TypeScript, Tailwind CSS, SWR for data fetching.
+- All API calls through Next.js rewrites (`next.config.js`) — no direct EC2 calls from browser.
+- Every component: loading skeleton + error state + empty state.
+- Recharts for all charts. `formatPrice()` for INR formatting.
 
-### Phase 3: AI Chat Interface
-Claude agent with tools, chat endpoint, widget rendering from Claude responses, save/pin dashboards.
-
-### Phase 4: Alerts & Digests
-Daily/weekly/monthly alert generation, email delivery, alert rules via chat, digest archive.
-
-### Phase 5: PetPooja Integration
-Real API client, ETL pipeline, hourly sync, CSV import fallback.
+### Auth
+All requests include:
+- `X-API-Key: <API_KEY>`
+- `X-Restaurant-ID: 5` (production)
 
 ---
 
-## GIT CONVENTIONS
+## Known Data Facts
 
-- Format: `type(scope): description`
-- Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `style`
-- Scope: `revenue`, `menu`, `cost`, `leakage`, `customers`, `ops`, `chat`, `alerts`, `digests`, `etl`, `ui`, `deploy`
-- Always include `Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>`
-- Commit after every working module — small, incremental commits
-- Never commit `.env`, credentials, or `__pycache__`
+- **Restaurant ID = 5** (IDs 1-4 consumed by failed seeds — never change this)
+- ~250 orders/weekday, ~350 weekends. 198 active items. 84 tables.
+- Food cost BOM coverage = ~17% — most items have no or incomplete recipes
+- Tally: 4,196 vouchers, 465 ledgers, FY 2025-26
+- All DB monetary values stored as **paisa** (INR × 100)
+
+---
+
+## What NOT to Do
+
+- Never create `frontend/` alongside `web/`
+- Never use supabase-py — PostgreSQL on EC2, SQLAlchemy
+- Never use `consumed[].price` as total cost — multiply by quantity
+- Never use `order_date` for the Stock API — it's `date`
+- Never use single cookie for Stock/Purchase/Sales APIs — both cookies required
+- Never use YYYY-MM-DD for Purchase/Sales APIs — DD-MM-YYYY
+- Never request more than 1 month in `get_purchase/`
+- Never include `POS SALE V2` Tally vouchers in P&L
+- Never commit `.env` to git
+- Never force-push to main

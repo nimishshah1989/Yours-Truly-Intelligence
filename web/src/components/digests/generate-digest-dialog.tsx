@@ -65,7 +65,10 @@ export function GenerateDigestDialog({
     setSubmitting(true);
     setServerError(null);
     try {
-      await api.post("/api/digests/generate", values);
+      await api.post("/api/digests/generate", {
+        digest_type: values.digest_type,
+        target_date: values.date,
+      });
       reset();
       onGenerated();
       onClose();

@@ -220,12 +220,26 @@ function RevenueConcentration() {
 
   if (isLoading || !data) return <ChartSkeleton className="h-[320px]" />;
 
-  const items = data as { name: string; revenue: number; cumulative_pct: number }[];
+  const allItems = data as { name: string; revenue: number; cumulative_pct: number }[];
+  // Show top 30 items for readability — they typically cover 80%+ of revenue
+  const items = allItems.slice(0, 30).map((item) => ({
+    ...item,
+    name: item.name.length > 16 ? item.name.slice(0, 14) + "…" : item.name,
+  }));
+  // Find the 80% crossing point
+  const itemsAt80 = allItems.findIndex((i) => i.cumulative_pct >= 80) + 1;
 
   return (
     <Card className="rounded-xl border-slate-200">
       <CardHeader>
-        <CardTitle className="text-base text-slate-800">Revenue Concentration (80/20)</CardTitle>
+        <CardTitle className="text-base text-slate-800">
+          Revenue Concentration (80/20)
+          {itemsAt80 > 0 && (
+            <span className="ml-2 text-xs font-normal text-slate-500">
+              Top {itemsAt80} of {allItems.length} items = 80% of revenue
+            </span>
+          )}
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <ParetoChartWidget

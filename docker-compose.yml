@@ -1,0 +1,22 @@
+version: '3.8'
+services:
+  yourstruly-api:
+    build: ./backend
+    container_name: yourstruly-api
+    restart: unless-stopped
+    ports:
+      - "8002:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+      - ytip_uploads:/app/uploads
+    networks:
+      - yourstruly-network
+
+volumes:
+  ytip_uploads:
+
+networks:
+  yourstruly-network:
+    driver: bridge

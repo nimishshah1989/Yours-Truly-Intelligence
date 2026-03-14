@@ -29,6 +29,7 @@ interface BarChartConfig {
   bars?: BarConfig[];
   layout?: "vertical" | "horizontal";
   currency?: boolean;
+  rotateLabels?: boolean;
 }
 
 interface BarChartWidgetProps {
@@ -62,6 +63,7 @@ export function BarChartWidget({ data, config }: BarChartWidgetProps) {
   const xKey = config?.xKey ?? "name";
   const currency = config?.currency ?? false;
   const isVertical = config?.layout === "vertical";
+  const rotateLabels = config?.rotateLabels ?? false;
   const bars = config?.bars ?? inferBars(data, xKey);
 
   if (!data.length || bars.length === 0) {
@@ -80,6 +82,7 @@ export function BarChartWidget({ data, config }: BarChartWidgetProps) {
       {...AXIS_STYLE}
       tickMargin={8}
       tickFormatter={isVertical ? (v: number) => formatTick(v, currency) : undefined}
+      {...(rotateLabels && !isVertical ? { angle: -35, textAnchor: "end" as const, height: 70, interval: 0, tick: { fontSize: 11, fill: "#64748b" } } : {})}
     />
   );
 
