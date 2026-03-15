@@ -87,9 +87,16 @@ def _detect_legal_entity(narration: str, party_ledger: str) -> str:
 
 
 def _parse_ledger_entries(voucher_el: ET.Element) -> List[TallyLedgerEntryData]:
-    """Extract all LEDGERENTRIES.LIST children from a VOUCHER element."""
+    """Extract all ledger entries from a VOUCHER element.
+
+    Tally XML uses ALLLEDGERENTRIES.LIST (not LEDGERENTRIES.LIST).
+    We search for both tags for safety across different export formats.
+    """
     entries = []
-    for entry_el in voucher_el.findall(".//LEDGERENTRIES.LIST"):
+    found = voucher_el.findall(".//ALLLEDGERENTRIES.LIST")
+    if not found:
+        found = voucher_el.findall(".//LEDGERENTRIES.LIST")
+    for entry_el in found:
         ledger_name = (entry_el.findtext("LEDGERNAME") or "").strip()
         if not ledger_name:
             continue
@@ -120,10 +127,11 @@ def _parse_voucher(voucher_el: ET.Element) -> Optional[TallyVoucherData]:
     amount = _to_paisa(voucher_el.findtext("AMOUNT") or "0")
 
     legal_entity = _detect_legal_entity(narration, party_ledger)
-    # PP-synced = PetPooja POS sale vouchers (already counted in orders revenue)
-    is_pp_synced = voucher_type in ("POS SALE V2", "POS Sale", "Roastrey Sale PP", "Sales")
-    # Intercompany = explicit fund transfers between group entities (not vendor purchases)
-    is_intercompany = False
+    # PP-synced = PetPooja POS daily aggregate vouchers ONLY
+    # Roastrey Sale PP and Sales are B2B Tally-only sales — NOT PetPooja data
+    is_pp_synced = voucher_type in ("POS SALE V2", "POS Sale")
+    # Intercompany = Café buying from Roastery (internal transfer at cost)
+    is_intercompany = voucher_type == "YTC Purchase PP"
 
     ledger_entries = _parse_ledger_entries(voucher_el)
 

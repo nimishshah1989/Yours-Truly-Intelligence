@@ -146,8 +146,8 @@ def parse_vouchers(filepath: Path) -> List[VoucherData]:
                 party_ledger=party_ledger,
                 amount=debit_total,
                 legal_entity=_detect_entity(narration, party_ledger),
-                is_pp_synced=(el.findtext("VOUCHERTYPENAME") or "") == "POS SALE V2",
-                is_intercompany=(el.findtext("VOUCHERTYPENAME") or "") == "YTC Purchase PP",
+                is_pp_synced=(el.findtext("VOUCHERTYPENAME") or "").strip() in ("POS SALE V2", "POS Sale"),
+                is_intercompany=(el.findtext("VOUCHERTYPENAME") or "").strip() == "YTC Purchase PP",
                 ledger_entries=entries,
             ))
         except Exception as exc:

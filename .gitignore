@@ -45,3 +45,6 @@ htmlcov/
 # Misc
 *.docx
 *.xlsx
+
+# Tally XML exports (large financial data — never commit)
+*.xml
