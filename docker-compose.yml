@@ -1,22 +1,31 @@
 version: '3.8'
+
 services:
-  yourstruly-api:
+  ytip-backend:
     build: ./backend
-    container_name: yourstruly-api
+    container_name: ytip-backend
     restart: unless-stopped
     ports:
-      - "8002:8000"
+      - "8001:8001"
     env_file:
       - .env
-    volumes:
-      - ./backend:/app
-      - ytip_uploads:/app/uploads
     networks:
-      - yourstruly-network
+      - ytip-network
 
-volumes:
-  ytip_uploads:
+  ytip-frontend:
+    build: ./web
+    container_name: ytip-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - API_URL=http://ytip-backend:8001
+      - NEXT_PUBLIC_API_KEY=${API_KEY:-}
+    depends_on:
+      - ytip-backend
+    networks:
+      - ytip-network
 
 networks:
-  yourstruly-network:
+  ytip-network:
     driver: bridge
