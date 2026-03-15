@@ -196,9 +196,10 @@ async def _process_incoming_message(
     if msg_type == "text":
         user_text = msg.get("text", {}).get("body", "")
 
-    elif msg_type == "audio":
+    elif msg_type in ("audio", "voice"):
         # Voice note — download and transcribe
-        media_id = msg.get("audio", {}).get("id", "")
+        # WhatsApp sends voice notes as type="voice", audio files as type="audio"
+        media_id = msg.get(msg_type, {}).get("id", "")
         if media_id:
             audio_bytes = await download_media(media_id)
             if audio_bytes:
