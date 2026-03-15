@@ -644,6 +644,50 @@ class OwnerProfile(Base):
 
 
 # ---------------------------------------------------------------------------
+# Owner Rules — learned from corrections in chat
+# ---------------------------------------------------------------------------
+class OwnerRule(Base):
+    """Stores owner corrections that the AI should remember.
+
+    When the owner says "don't show mineral water in top items" or
+    "exclude addons from item rankings", that correction becomes a rule
+    that's injected into the system prompt for all future queries.
+
+    Categories:
+      - exclude_items: Items to always exclude from rankings
+      - exclude_categories: Categories to exclude
+      - terminology: How the owner refers to things
+      - preference: General preferences (e.g., "always show net revenue")
+      - context: Business context the AI should know
+    """
+    __tablename__ = "owner_rules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    restaurant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("restaurants.id"), nullable=False
+    )
+    category: Mapped[str] = mapped_column(
+        String(50), nullable=False
+    )  # exclude_items | exclude_categories | terminology | preference | context
+    rule_text: Mapped[str] = mapped_column(
+        Text, nullable=False
+    )  # Human-readable rule
+    rule_data: Mapped[Optional[Dict]] = mapped_column(
+        JSONB, default=dict
+    )  # Structured data (e.g., {"items": ["Mineral Water", "Bisleri"]})
+    source_message: Mapped[Optional[str]] = mapped_column(
+        Text
+    )  # The user message that triggered this rule
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_owner_rules_restaurant", "restaurant_id"),
+        Index("ix_owner_rules_active", "restaurant_id", "is_active"),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Reconciliation
 # ---------------------------------------------------------------------------
 class ReconciliationCheck(Base):

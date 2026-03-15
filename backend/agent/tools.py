@@ -1,8 +1,9 @@
 """Tool definitions and implementations for the Claude agent.
 
-Two tools:
+Three tools:
   - run_sql: Execute read-only SQL against the restaurant database
   - create_widget: Build a visualization widget spec for the frontend
+  - save_owner_preference: Save a learned owner preference for future queries
 
 All SQL execution uses the read-only database connection. Dangerous statements
 are blocked at multiple layers: keyword filtering + read-only DB user.
@@ -14,7 +15,7 @@ from typing import Any, Dict
 
 from sqlalchemy import text
 
-from database import SessionReadOnly
+from database import SessionLocal, SessionReadOnly
 from agent.widget_schema import WidgetSpec
 
 logger = logging.getLogger("ytip.agent.tools")
@@ -100,6 +101,59 @@ TOOL_DEFINITIONS = [
             "required": ["type", "title", "data"],
         },
     },
+    {
+        "name": "save_owner_preference",
+        "description": (
+            "Save an owner's preference or correction so it's remembered "
+            "in all future conversations. Use this when the owner says things like "
+            "'don't show mineral water', 'exclude addons', 'I prefer net revenue', "
+            "'always show category breakdown', etc. The preference is stored permanently "
+            "and injected into the system prompt for all future queries."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string",
+                    "enum": [
+                        "exclude_items",
+                        "exclude_categories",
+                        "terminology",
+                        "preference",
+                        "context",
+                    ],
+                    "description": (
+                        "Type of preference: "
+                        "exclude_items = specific items to always exclude from rankings, "
+                        "exclude_categories = categories to exclude, "
+                        "terminology = how the owner refers to things, "
+                        "preference = general display/analysis preferences, "
+                        "context = business context the AI should remember"
+                    ),
+                },
+                "rule_text": {
+                    "type": "string",
+                    "description": (
+                        "Human-readable rule to remember, e.g., "
+                        "'Never include Mineral Water or Bisleri in item rankings' "
+                        "or 'Owner prefers seeing net revenue instead of gross'"
+                    ),
+                },
+                "rule_data": {
+                    "type": "object",
+                    "description": (
+                        "Optional structured data for the rule, e.g., "
+                        '{"items": ["Mineral Water", "Bisleri"]} for exclude_items'
+                    ),
+                },
+                "source_message": {
+                    "type": "string",
+                    "description": "The exact user message that triggered this preference",
+                },
+            },
+            "required": ["category", "rule_text"],
+        },
+    },
 ]
 
 # Keywords that must never appear in a query — prevents mutations even if
@@ -126,6 +180,8 @@ def execute_tool(
         return _execute_sql(tool_input.get("query", ""), restaurant_id)
     elif tool_name == "create_widget":
         return _create_widget(tool_input)
+    elif tool_name == "save_owner_preference":
+        return _save_preference(tool_input, restaurant_id)
     else:
         logger.warning("Unknown tool requested: %s", tool_name)
         return {"error": f"Unknown tool: {tool_name}"}
@@ -217,3 +273,70 @@ def _create_widget(tool_input: Dict[str, Any]) -> Dict[str, Any]:
         return {"error": f"Missing required field: {exc}"}
     except Exception as exc:
         return {"error": f"Invalid widget spec: {str(exc)}"}
+
+
+# -------------------------------------------------------------------------
+# Owner preference storage
+# -------------------------------------------------------------------------
+def _save_preference(tool_input: Dict[str, Any], restaurant_id: int) -> Dict[str, Any]:
+    """Save an owner preference/correction to the database.
+
+    These rules are loaded into the system prompt for all future queries,
+    enabling the AI to learn and adapt to the owner's needs.
+    """
+    category = tool_input.get("category", "preference")
+    rule_text = tool_input.get("rule_text", "")
+    rule_data = tool_input.get("rule_data")
+    source_message = tool_input.get("source_message")
+
+    if not rule_text:
+        return {"error": "rule_text is required"}
+
+    session = SessionLocal()
+    try:
+        # Check for duplicate rules (same text)
+        existing = session.execute(
+            text("""
+                SELECT id FROM owner_rules
+                WHERE restaurant_id = :rid AND rule_text = :rt AND is_active = true
+            """),
+            {"rid": restaurant_id, "rt": rule_text},
+        ).fetchone()
+
+        if existing:
+            return {
+                "status": "already_exists",
+                "message": "This preference is already saved.",
+            }
+
+        session.execute(
+            text("""
+                INSERT INTO owner_rules
+                (restaurant_id, category, rule_text, rule_data, source_message, is_active)
+                VALUES (:rid, :cat, :rt, CAST(:rd AS jsonb), :sm, true)
+            """),
+            {
+                "rid": restaurant_id,
+                "cat": category,
+                "rt": rule_text,
+                "rd": json.dumps(rule_data) if rule_data else None,
+                "sm": source_message,
+            },
+        )
+        session.commit()
+
+        logger.info(
+            "Saved owner preference for restaurant %d: [%s] %s",
+            restaurant_id, category, rule_text[:100],
+        )
+
+        return {
+            "status": "saved",
+            "message": f"Got it! I'll remember: {rule_text}",
+        }
+    except Exception as exc:
+        session.rollback()
+        logger.error("Failed to save owner preference: %s", exc)
+        return {"error": f"Could not save preference: {str(exc)}"}
+    finally:
+        session.close()

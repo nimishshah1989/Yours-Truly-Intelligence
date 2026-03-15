@@ -247,46 +247,75 @@ def _menu_cards(
 def _operational_cards(
     session: Session, restaurant_id: int, target_date: date,
 ) -> List[Dict[str, Any]]:
-    """Generate operational insight cards."""
+    """Generate operational insight cards.
+
+    Always generates at least the peak hours card if there's any order data.
+    Area performance shows when there are 2+ areas with meaningful difference.
+    """
     cards = []
 
-    # Area performance
+    # Area performance — show if 2+ areas exist
     areas = _area_performance(session, restaurant_id, target_date)
-    if len(areas) > 3:
+    if len(areas) >= 2:
         best = areas[0]
         worst = areas[-1]
-        if best["revenue"] > worst["revenue"] * 3:
+        ratio = best["revenue"] / max(worst["revenue"], 1)
+
+        # Always show area breakdown (lowered threshold from 3× to 1.5×)
+        if ratio > 1.5:
             cards.append({
                 "card_type": "optimization",
-                "priority": "low",
-                "headline": f"{best['area']} outperforms {worst['area']} by {(best['revenue']/max(worst['revenue'],1)):.0f}×",
+                "priority": "low" if ratio < 3 else "medium",
+                "headline": f"{best['area']} leads with {format_currency(best['revenue'])}",
                 "body": (
-                    f"Top area: {best['area']} — {format_currency(best['revenue'])} "
+                    f"Top: {best['area']} — {format_currency(best['revenue'])} "
                     f"({best['orders']} orders)\n"
-                    f"Weakest: {worst['area']} — {format_currency(worst['revenue'])} "
-                    f"({worst['orders']} orders)"
+                    f"Bottom: {worst['area']} — {format_currency(worst['revenue'])} "
+                    f"({worst['orders']} orders)\n"
+                    f"Spread: {ratio:.1f}× difference"
                 ),
                 "action_text": "View area heatmap",
                 "action_url": "/operations",
             })
 
-    # Peak hour analysis
+    # Peak hour analysis — always show if there's data
     peak = _peak_hours(session, restaurant_id, target_date)
     if peak:
         peak_str = ", ".join(f"{h['hour']}:00" for h in peak[:3])
+        total_orders = sum(h["orders"] for h in peak)
+        total_rev = sum(h["revenue"] for h in peak)
         cards.append({
             "card_type": "optimization",
             "priority": "low",
-            "headline": f"Peak hours yesterday: {peak_str}",
+            "headline": f"Peak hours: {peak_str}",
             "body": (
-                f"Busiest hour: {peak[0]['hour']}:00 — "
+                f"Busiest: {peak[0]['hour']}:00 — "
                 f"{peak[0]['orders']} orders, "
-                f"{format_currency(peak[0]['revenue'])}"
+                f"{format_currency(peak[0]['revenue'])}\n"
+                f"Total yesterday: {total_orders} orders, "
+                f"{format_currency(total_rev)}"
             ),
             "chart_data": {
-                "type": "bar",
-                "values": [{"hour": h["hour"], "orders": h["orders"]} for h in peak],
+                "type": "sparkline",
+                "values": [h["orders"] for h in sorted(peak, key=lambda x: x["hour"])],
             },
+            "action_text": "View hourly breakdown",
+            "action_url": "/operations",
+        })
+
+    # Order type mix (dine-in vs delivery vs takeaway)
+    order_mix = _order_type_mix(session, restaurant_id, target_date)
+    if order_mix and len(order_mix) >= 2:
+        top_type = order_mix[0]
+        mix_str = " · ".join(
+            f"{m['type']}: {m['pct']:.0f}%"
+            for m in order_mix[:3]
+        )
+        cards.append({
+            "card_type": "optimization",
+            "priority": "low",
+            "headline": f"{top_type['type']} dominates at {top_type['pct']:.0f}%",
+            "body": f"Order mix: {mix_str}",
         })
 
     return cards
@@ -389,20 +418,26 @@ def _weekday_avg_revenue(session: Session, rid: int, before: date, days: int = 1
 def _top_items_with_share(session: Session, rid: int, dt: date) -> List[Dict[str, Any]]:
     rows = session.execute(
         text("""
-            WITH totals AS (
-                SELECT SUM(oi.total_price) AS grand_total
+            WITH filtered_items AS (
+                SELECT oi.item_name, oi.quantity, oi.total_price
                 FROM order_items oi
                 JOIN orders o ON o.id = oi.order_id
                 WHERE oi.restaurant_id = :rid AND DATE(o.ordered_at) = :dt
                   AND o.is_cancelled = false AND o.status = 'completed'
+                  AND oi.unit_price > 0
+                  AND COALESCE(oi.category, '') NOT IN ('Add Ons', 'Addons', 'Modifiers', 'Packaging')
+                  AND oi.item_name NOT ILIKE '%mineral water%'
+                  AND oi.item_name NOT ILIKE '%bisleri%'
+                  AND oi.item_name NOT ILIKE '%carry bag%'
+                  AND oi.item_name NOT ILIKE '%packing%'
+            ),
+            totals AS (
+                SELECT SUM(total_price) AS grand_total FROM filtered_items
             )
-            SELECT oi.item_name, SUM(oi.quantity) AS qty, SUM(oi.total_price) AS rev,
-                   ROUND(SUM(oi.total_price)*100.0 / NULLIF((SELECT grand_total FROM totals),0), 1) AS share
-            FROM order_items oi
-            JOIN orders o ON o.id = oi.order_id
-            WHERE oi.restaurant_id = :rid AND DATE(o.ordered_at) = :dt
-              AND o.is_cancelled = false AND o.status = 'completed'
-            GROUP BY oi.item_name
+            SELECT item_name, SUM(quantity) AS qty, SUM(total_price) AS rev,
+                   ROUND(SUM(total_price)*100.0 / NULLIF((SELECT grand_total FROM totals),0), 1) AS share
+            FROM filtered_items
+            GROUP BY item_name
             ORDER BY rev DESC
             LIMIT 10
         """),
@@ -499,6 +534,23 @@ def _peak_hours(session: Session, rid: int, dt: date) -> List[Dict[str, Any]]:
         {"hour": int(r[0]), "orders": int(r[1]), "revenue": int(r[2])}
         for r in rows
     ]
+
+
+def _order_type_mix(session: Session, rid: int, dt: date) -> List[Dict[str, Any]]:
+    """Get order type distribution for a day."""
+    rows = session.execute(
+        text("""
+            SELECT order_type, COUNT(*) AS cnt,
+                   ROUND(COUNT(*) * 100.0 / NULLIF(SUM(COUNT(*)) OVER(), 0), 1) AS pct
+            FROM orders
+            WHERE restaurant_id = :rid AND DATE(ordered_at) = :dt
+              AND is_cancelled = false AND status = 'completed'
+            GROUP BY order_type
+            ORDER BY cnt DESC
+        """),
+        {"rid": rid, "dt": dt},
+    ).fetchall()
+    return [{"type": r[0] or "Unknown", "count": int(r[1]), "pct": float(r[2] or 0)} for r in rows]
 
 
 def _customer_mix(session: Session, rid: int, dt: date) -> Dict[str, int]:

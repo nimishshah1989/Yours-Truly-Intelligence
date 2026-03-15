@@ -188,7 +188,20 @@ export function useVoiceInput(
       if (event.error === "no-speech") {
         setError("No speech detected. Try again.");
       } else if (event.error === "not-allowed") {
-        setError("Microphone access denied. Please allow microphone access.");
+        // This happens when: (a) user denied mic, or (b) site is HTTP not HTTPS
+        const isHttps =
+          typeof window !== "undefined" &&
+          (window.location.protocol === "https:" ||
+            window.location.hostname === "localhost");
+        if (!isHttps) {
+          setError(
+            "Voice requires HTTPS. Use the site via https:// or on localhost.",
+          );
+        } else {
+          setError(
+            "Microphone blocked. Tap the lock icon in your browser address bar → allow microphone.",
+          );
+        }
       } else if (event.error === "aborted") {
         // User cancelled — not an error
       } else {
