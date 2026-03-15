@@ -562,6 +562,60 @@ class TallyLedgerEntry(Base):
 
 
 # ---------------------------------------------------------------------------
+# WhatsApp Conversations
+# ---------------------------------------------------------------------------
+class WhatsAppMessage(Base):
+    __tablename__ = "whatsapp_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    phone: Mapped[str] = mapped_column(String(20), nullable=False)
+    sender_name: Mapped[Optional[str]] = mapped_column(String(200))
+    role: Mapped[str] = mapped_column(String(20), nullable=False)  # "user" | "assistant"
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_whatsapp_messages_phone_date", "phone", "created_at"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Insight Feed Cards
+# ---------------------------------------------------------------------------
+class InsightCard(Base):
+    __tablename__ = "insight_cards"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    restaurant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("restaurants.id"), nullable=False
+    )
+    # "attention" | "opportunity" | "growth" | "optimization"
+    card_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    # "high" | "medium" | "low"
+    priority: Mapped[str] = mapped_column(String(10), default="medium")
+    headline: Mapped[str] = mapped_column(String(300), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    # Suggested action text
+    action_text: Mapped[Optional[str]] = mapped_column(String(200))
+    action_url: Mapped[Optional[str]] = mapped_column(String(500))
+    # Chart data for the card (sparkline, mini bar chart, etc.)
+    chart_data: Mapped[Optional[Dict]] = mapped_column(JSONB)
+    # Comparison context
+    comparison: Mapped[Optional[str]] = mapped_column(String(200))
+    # Has the owner seen/dismissed this card?
+    is_read: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_dismissed: Mapped[bool] = mapped_column(Boolean, default=False)
+    # When was this insight relevant?
+    insight_date: Mapped[date] = mapped_column(Date, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_insight_cards_restaurant_date", "restaurant_id", "insight_date"),
+        Index("ix_insight_cards_restaurant_type", "restaurant_id", "card_type"),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Owner Profile
 # ---------------------------------------------------------------------------
 class OwnerProfile(Base):

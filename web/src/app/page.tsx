@@ -1,176 +1,135 @@
 "use client";
 
-import Link from "next/link";
-import { Suspense } from "react";
-import { Pin } from "lucide-react";
-import { PageHeader } from "@/components/layout/page-header";
-import { StatCard } from "@/components/widgets/stat-card";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
+import { useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { useFeed } from "@/hooks/use-feed";
 import { useRestaurant } from "@/hooks/use-restaurant";
-import { useHomeSummary } from "@/hooks/use-home";
-import { usePinnedDashboards } from "@/hooks/use-dashboards";
-import { formatDate } from "@/lib/utils";
-import type { StatCardData, SavedDashboard } from "@/lib/types";
+import { InsightCard } from "@/components/feed/insight-card";
 
-export default function HomePage() {
+export default function FeedPage() {
+  const router = useRouter();
   const { current } = useRestaurant();
+  const { cards, isLoading, dismissCard, refresh } = useFeed(30);
 
-  return (
-    <Suspense fallback={<HomePageSkeleton />}>
-      <PageHeader
-        title={current?.name ?? "Dashboard"}
-        description="Executive summary — key metrics at a glance"
-      />
-
-      <HomeStats />
-
-      <PinnedDashboards />
-    </Suspense>
+  const handleAction = useCallback(
+    (url: string) => {
+      router.push(url);
+    },
+    [router],
   );
-}
 
-// ---------------------------------------------------------------------------
-// Home stat cards
-// ---------------------------------------------------------------------------
-
-interface HomeSummaryResponse {
-  stats: Array<{
-    label: string;
-    value: string;
-    change?: number | null;
-    change_label?: string | null;
-    sparkline?: number[] | null;
-    prefix?: string | null;
-    suffix?: string | null;
-  }>;
-  last_updated: string;
-}
-
-function HomeStats() {
-  const { data, isLoading } = useHomeSummary() as {
-    data: HomeSummaryResponse | undefined;
-    isLoading: boolean;
-  };
-
-  if (isLoading || !data) {
-    return (
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {[1, 2, 3, 4].map((i) => (
-          <Skeleton key={i} className="h-28 rounded-xl" />
-        ))}
-      </div>
-    );
-  }
+  const greeting = getGreeting();
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      {data.stats.map((stat) => {
-        const cardData: StatCardData = {
-          label: stat.label,
-          value: stat.value,
-          change: stat.change ?? undefined,
-          changeLabel: stat.change_label ?? undefined,
-          sparkline: stat.sparkline ?? undefined,
-          prefix: stat.prefix ?? undefined,
-          suffix: stat.suffix ?? undefined,
-        };
-        return <StatCard key={stat.label} data={cardData} />;
-      })}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Pinned dashboards
-// ---------------------------------------------------------------------------
-
-function PinnedDashboardCard({ dashboard }: { dashboard: SavedDashboard }) {
-  return (
-    <Link href={`/dashboards/${dashboard.id}`}>
-      <Card className="cursor-pointer rounded-xl border-slate-200 transition-all hover:border-teal-300 hover:shadow-sm">
-        <CardHeader className="pb-2">
-          <div className="flex items-start justify-between gap-2">
-            <CardTitle className="line-clamp-1 text-sm font-semibold text-slate-800">
-              {dashboard.title}
-            </CardTitle>
-            <Badge variant="secondary" className="shrink-0 gap-1 bg-teal-50 text-xs text-teal-700">
-              <Pin className="h-3 w-3" />
-              Pinned
-            </Badge>
-          </div>
-          {dashboard.description && (
-            <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-              {dashboard.description}
-            </p>
-          )}
-        </CardHeader>
-        <CardContent>
-          <p className="text-xs text-muted-foreground">{formatDate(dashboard.created_at)}</p>
-        </CardContent>
-      </Card>
-    </Link>
-  );
-}
-
-function PinnedDashboards() {
-  const { data: pinned, isLoading } = usePinnedDashboards();
-
-  return (
-    <div className="mt-8">
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-foreground">Pinned Dashboards</h2>
-        <Link href="/dashboards" className="text-xs text-teal-600 hover:underline">
-          View all
-        </Link>
+    <div className="mx-auto max-w-lg px-4 pt-6">
+      {/* Header */}
+      <div className="mb-6">
+        <h1 className="text-lg font-semibold text-yt-dark">
+          {greeting}
+        </h1>
+        <p className="mt-0.5 text-sm text-yt-dark/50">
+          {current?.name ?? "YoursTruly"}
+          {" · "}
+          {new Date().toLocaleDateString("en-IN", {
+            weekday: "long",
+            day: "numeric",
+            month: "short",
+          })}
+        </p>
       </div>
 
+      {/* Quick actions */}
+      <div className="mb-6 flex gap-2">
+        <button
+          type="button"
+          onClick={() => router.push("/chat")}
+          className="flex-1 rounded-xl border border-yt-gold/30 bg-white px-3 py-3 text-left shadow-sm transition-transform active:scale-[0.98]"
+        >
+          <div className="mb-1 text-lg">💬</div>
+          <div className="text-[13px] font-medium text-yt-dark">Ask anything</div>
+          <div className="text-[11px] text-yt-dark/40">Text or voice</div>
+        </button>
+        <button
+          type="button"
+          onClick={() => router.push("/briefing")}
+          className="flex-1 rounded-xl border border-yt-gold/30 bg-white px-3 py-3 text-left shadow-sm transition-transform active:scale-[0.98]"
+        >
+          <div className="mb-1 text-lg">📊</div>
+          <div className="text-[13px] font-medium text-yt-dark">Today&apos;s briefing</div>
+          <div className="text-[11px] text-yt-dark/40">Yesterday&apos;s summary</div>
+        </button>
+      </div>
+
+      {/* Feed */}
       {isLoading ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="space-y-4">
           {[1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-24 rounded-xl" />
+            <div
+              key={i}
+              className="h-36 animate-pulse rounded-xl bg-white/60"
+            />
           ))}
         </div>
-      ) : pinned.length === 0 ? (
-        <Card className="rounded-xl border-dashed border-slate-300">
-          <CardContent className="flex h-36 items-center justify-center p-6">
-            <p className="text-sm text-muted-foreground">
-              No pinned dashboards yet.{" "}
-              <Link href="/chat" className="text-teal-600 hover:underline">
-                Ask the AI
-              </Link>{" "}
-              to generate insights and pin them here.
-            </p>
-          </CardContent>
-        </Card>
+      ) : cards.length === 0 ? (
+        <EmptyFeed onRefresh={refresh} />
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {pinned.map((d) => (
-            <PinnedDashboardCard key={d.id} dashboard={d} />
-          ))}
+        <div className="space-y-3 pb-4">
+          {/* Attention cards first */}
+          {cards
+            .filter((c) => c.card_type === "attention")
+            .map((card) => (
+              <InsightCard
+                key={card.id}
+                card={card}
+                onDismiss={dismissCard}
+                onAction={handleAction}
+              />
+            ))}
+
+          {/* Then all other cards */}
+          {cards
+            .filter((c) => c.card_type !== "attention")
+            .map((card) => (
+              <InsightCard
+                key={card.id}
+                card={card}
+                onDismiss={dismissCard}
+                onAction={handleAction}
+              />
+            ))}
         </div>
       )}
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Skeleton for SSR fallback
-// ---------------------------------------------------------------------------
-
-function HomePageSkeleton() {
+function EmptyFeed({ onRefresh }: { onRefresh: () => void }) {
   return (
-    <div>
-      <div className="flex justify-between pb-6">
-        <Skeleton className="h-7 w-48" />
-        <Skeleton className="h-9 w-40" />
+    <div className="flex flex-col items-center gap-4 rounded-xl border border-yt-gold/20 bg-white p-8 text-center">
+      <div className="text-4xl">☕</div>
+      <div>
+        <h3 className="text-base font-semibold text-yt-dark">
+          No insights yet
+        </h3>
+        <p className="mt-1 text-sm text-yt-dark/50">
+          Insights will appear here after the nightly analysis runs.
+          Try asking a question in the chat!
+        </p>
       </div>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {[1, 2, 3, 4].map((i) => (
-          <Skeleton key={i} className="h-28 rounded-xl" />
-        ))}
-      </div>
+      <button
+        type="button"
+        onClick={onRefresh}
+        className="rounded-lg bg-yt-primary px-4 py-2 text-sm font-medium text-white"
+      >
+        Refresh
+      </button>
     </div>
   );
+}
+
+function getGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning ☀️";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
 }

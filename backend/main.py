@@ -94,6 +94,10 @@ from routers.digests import router as digests_router
 from routers.dashboards import router as dashboards_router
 from routers.data_status import router as data_status_router
 
+# Mount routers — Phase 5: WhatsApp + Feed (anti-dashboard)
+from routers.whatsapp import router as whatsapp_router
+from routers.feed import router as feed_router
+
 app.include_router(health_router)
 app.include_router(restaurants_router)
 app.include_router(revenue_router)
@@ -111,6 +115,8 @@ app.include_router(alerts_router)
 app.include_router(digests_router)
 app.include_router(dashboards_router)
 app.include_router(data_status_router)
+app.include_router(whatsapp_router)
+app.include_router(feed_router)
 
 
 if __name__ == "__main__":

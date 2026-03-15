@@ -13,7 +13,11 @@ from config import settings
 
 logger = logging.getLogger("ytip.middleware.auth")
 
-PUBLIC_PATHS = frozenset({"/api/health", "/docs", "/openapi.json", "/redoc"})
+PUBLIC_PATHS = frozenset({
+    "/api/health", "/docs", "/openapi.json", "/redoc",
+    "/api/whatsapp/webhook",  # Meta sends without auth
+    "/api/whatsapp/status",   # Config check — no secrets exposed
+})
 
 
 class ApiKeyMiddleware(BaseHTTPMiddleware):

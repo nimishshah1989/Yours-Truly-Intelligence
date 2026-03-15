@@ -216,6 +216,94 @@ def _generate_digest(db, restaurant, digest_type: str, period_start: date, perio
 
 
 # ------------------------------------------------------------------
+# Job: morning WhatsApp briefing (7:30 AM IST)
+# ------------------------------------------------------------------
+
+async def send_morning_whatsapp_briefing() -> None:
+    """Daily 7:30 AM IST: generate and send morning briefing via WhatsApp."""
+    from config import settings
+
+    if not settings.owner_whatsapp:
+        logger.info("[scheduler] No OWNER_WHATSAPP set — skipping briefing")
+        return
+    if not settings.whatsapp_access_token:
+        logger.info("[scheduler] WhatsApp not configured — skipping briefing")
+        return
+
+    logger.info("[scheduler] Sending morning WhatsApp briefing")
+    try:
+        from services.briefing_service import generate_morning_briefing
+        from services.whatsapp_service import send_text_message
+
+        # Generate for default restaurant (YoursTruly = 5)
+        result = generate_morning_briefing(restaurant_id=5)
+        message = result.get("whatsapp_message", "")
+        if message:
+            await send_text_message(settings.owner_whatsapp, message)
+            logger.info("[scheduler] Morning briefing sent to %s", settings.owner_whatsapp[:6])
+        else:
+            logger.warning("[scheduler] Empty briefing — nothing sent")
+    except Exception as exc:
+        logger.error("[scheduler] Morning briefing failed: %s", exc)
+
+
+# ------------------------------------------------------------------
+# Job: weekly WhatsApp pulse (Sunday 8 PM IST)
+# ------------------------------------------------------------------
+
+async def send_weekly_whatsapp_pulse() -> None:
+    """Sunday 8 PM IST: generate and send weekly pulse via WhatsApp."""
+    from config import settings
+
+    if not settings.owner_whatsapp or not settings.whatsapp_access_token:
+        logger.info("[scheduler] WhatsApp not configured — skipping weekly pulse")
+        return
+
+    logger.info("[scheduler] Sending weekly WhatsApp pulse")
+    try:
+        from services.briefing_service import generate_weekly_pulse
+        from services.whatsapp_service import send_text_message
+
+        result = generate_weekly_pulse(restaurant_id=5)
+        message = result.get("whatsapp_message", "")
+        if message:
+            await send_text_message(settings.owner_whatsapp, message)
+            logger.info("[scheduler] Weekly pulse sent")
+    except Exception as exc:
+        logger.error("[scheduler] Weekly pulse failed: %s", exc)
+
+
+# ------------------------------------------------------------------
+# Job: nightly insight card generation (2 AM IST)
+# ------------------------------------------------------------------
+
+async def generate_insight_cards() -> None:
+    """Daily 2 AM IST: generate insight cards after ETL is done."""
+    logger.info("[scheduler] Generating insight cards")
+
+    db = SessionLocal()
+    try:
+        from services.feed_service import generate_daily_cards
+
+        restaurants = _get_active_restaurants(db)
+        yesterday = date.today() - timedelta(days=1)
+        for restaurant in restaurants:
+            try:
+                cards = generate_daily_cards(restaurant.id, yesterday)
+                logger.info(
+                    "[scheduler] Generated %d cards for restaurant %s",
+                    len(cards), restaurant.id,
+                )
+            except Exception as exc:
+                logger.error(
+                    "[scheduler] Card generation failed: restaurant=%s error=%s",
+                    restaurant.id, exc,
+                )
+    finally:
+        db.close()
+
+
+# ------------------------------------------------------------------
 # Lifecycle
 # ------------------------------------------------------------------
 
@@ -251,6 +339,27 @@ def start_scheduler() -> None:
         id="monthly_digests",
         replace_existing=True,
     )
+
+    # Phase 5: WhatsApp briefings + insight cards
+    scheduler.add_job(
+        send_morning_whatsapp_briefing,
+        CronTrigger(hour=7, minute=30, timezone=TIMEZONE),
+        id="morning_whatsapp_briefing",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        send_weekly_whatsapp_pulse,
+        CronTrigger(day_of_week="sun", hour=20, minute=0, timezone=TIMEZONE),
+        id="weekly_whatsapp_pulse",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        generate_insight_cards,
+        CronTrigger(hour=2, minute=0, timezone=TIMEZONE),
+        id="nightly_insight_cards",
+        replace_existing=True,
+    )
+
     scheduler.start()
     logger.info("[scheduler] APScheduler started with %d jobs", len(scheduler.get_jobs()))
 

@@ -1,22 +1,38 @@
-import type { Metadata } from "next";
-import { Inter, Geist_Mono } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { DM_Sans, Playfair_Display } from "next/font/google";
 import "./globals.css";
-import { Sidebar } from "@/components/layout/sidebar";
 import { RestaurantProvider } from "@/hooks/use-restaurant";
+import { BottomNav } from "@/components/layout/bottom-nav";
 
-const inter = Inter({
-  variable: "--font-inter",
+const dmSans = DM_Sans({
+  variable: "--font-dm-sans",
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const playfair = Playfair_Display({
+  variable: "--font-playfair",
   subsets: ["latin"],
+  weight: ["700", "800"],
 });
 
 export const metadata: Metadata = {
-  title: "YoursTruly Intelligence Platform",
-  description: "Deep analytics and AI-powered intelligence for YoursTruly Cafe",
+  title: "YoursTruly Intelligence",
+  description: "Your AI-powered business partner for YoursTruly Café",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "YoursTruly",
+  },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  themeColor: "#7B1A1A",
 };
 
 export default function RootLayout({
@@ -26,13 +42,17 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${inter.variable} ${geistMono.variable} font-sans antialiased`}>
+      <body
+        className={`${dmSans.variable} ${playfair.variable} font-sans antialiased`}
+      >
         <RestaurantProvider>
-          <div className="flex h-screen overflow-hidden">
-            <Sidebar />
-            <main className="flex-1 overflow-y-auto bg-background p-6">
+          <div className="flex min-h-screen flex-col bg-yt-cream">
+            {/* Main content — scrollable, padded for bottom nav */}
+            <main className="flex-1 overflow-y-auto pb-20">
               {children}
             </main>
+            {/* Fixed bottom navigation */}
+            <BottomNav />
           </div>
         </RestaurantProvider>
       </body>

@@ -41,8 +41,20 @@ class Settings(BaseSettings):
     petpooja_inv_app_secret: str = ""
     petpooja_inv_access_token: str = ""
 
+    # WhatsApp Cloud API
+    whatsapp_phone_number_id: str = ""
+    whatsapp_access_token: str = ""
+    whatsapp_verify_token: str = "ytip-verify-2026"
+    whatsapp_business_account_id: str = ""
+
+    # OpenAI (for Whisper STT)
+    openai_api_key: str = ""
+
     # Tally
     tally_upload_dir: str = "/tmp/tally_uploads"
+
+    # Owner phone (for proactive WhatsApp messages)
+    owner_whatsapp: str = ""  # e.g. "919876543210" — country code, no +
 
     # Email
     resend_from_email: str = "alerts@yourstruly.in"

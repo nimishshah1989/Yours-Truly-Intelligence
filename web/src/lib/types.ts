@@ -783,3 +783,48 @@ export interface HealthResponse {
   restaurant_count: number;
   order_count: number;
 }
+
+// ---------------------------------------------------------------------------
+// Insight Feed Cards
+// ---------------------------------------------------------------------------
+
+export type CardType = "attention" | "opportunity" | "growth" | "optimization";
+export type CardPriority = "high" | "medium" | "low";
+
+export interface InsightCard {
+  id: number;
+  card_type: CardType;
+  priority: CardPriority;
+  headline: string;
+  body: string;
+  action_text: string | null;
+  action_url: string | null;
+  chart_data: Record<string, unknown> | null;
+  comparison: string | null;
+  is_read: boolean;
+  insight_date: string | null;
+  created_at: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Briefing
+// ---------------------------------------------------------------------------
+
+export interface BriefingSection {
+  emoji: string;
+  title: string;
+  body: string;
+}
+
+export interface BriefingResponse {
+  whatsapp_message: string;
+  sections: BriefingSection[];
+  anomalies: Array<{
+    type: string;
+    severity: string;
+    message: string;
+    value: number;
+  }>;
+  metrics: Record<string, unknown>;
+  target_date: string;
+}
