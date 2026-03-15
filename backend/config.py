@@ -32,6 +32,14 @@ class Settings(BaseSettings):
     petpooja_rest_id: str = ""
     # Full cookie value: "PETPOOJA_API=..."
     petpooja_cookie: str = ""
+    # CO cookie for Stock/Purchase/Sales APIs (requires BOTH cookies)
+    # Value: "PETPOOJA_CO=..."
+    petpooja_co_cookie: str = ""
+
+    # PetPooja Inventory API (Stock, COGS, Purchases — DIFFERENT credentials)
+    petpooja_inv_app_key: str = ""
+    petpooja_inv_app_secret: str = ""
+    petpooja_inv_access_token: str = ""
 
     # Tally
     tally_upload_dir: str = "/tmp/tally_uploads"
