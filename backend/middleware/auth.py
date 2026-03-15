@@ -17,6 +17,7 @@ PUBLIC_PATHS = frozenset({
     "/api/health", "/docs", "/openapi.json", "/redoc",
     "/api/whatsapp/webhook",  # Meta sends without auth
     "/api/whatsapp/status",   # Config check — no secrets exposed
+    "/api/telegram/status",   # Config check — no secrets exposed
 })
 
 

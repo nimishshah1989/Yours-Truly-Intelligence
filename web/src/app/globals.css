@@ -119,6 +119,11 @@
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
+/* Safe area padding for chat input above bottom nav */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
 /* Hide scrollbar but keep scrolling */
 .hide-scrollbar::-webkit-scrollbar {
   display: none;
@@ -126,4 +131,17 @@
 .hide-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* Mobile touch improvements */
+@media (hover: none) {
+  button {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html, body {
+    overscroll-behavior: none;
+  }
 }

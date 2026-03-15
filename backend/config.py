@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     whatsapp_verify_token: str = "ytip-verify-2026"
     whatsapp_business_account_id: str = ""
 
+    # Telegram Bot
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""  # Owner's chat ID — auto-discovered via /start
+
     # OpenAI (for Whisper STT)
     openai_api_key: str = ""
 

@@ -2,6 +2,7 @@
 
 import { useRef, useEffect, useCallback, useState } from "react";
 import { useChat } from "@/hooks/use-chat";
+import { useVoiceInput } from "@/hooks/use-voice-input";
 import { cn } from "@/lib/utils";
 import type { WidgetSpec } from "@/lib/types";
 
@@ -20,12 +21,32 @@ export default function ChatPage() {
     activeSessionId,
     isSending,
     sendMessage,
-    createSession,
   } = useChat();
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [inputValue, setInputValue] = useState("");
+
+  // Voice input — uses browser's Web Speech API (free, no server calls)
+  const {
+    isSupported: voiceSupported,
+    isListening,
+    transcript: voiceTranscript,
+    toggleListening,
+    error: voiceError,
+  } = useVoiceInput({
+    language: "en-IN",
+    onResult: (text) => {
+      // When voice recognition finishes, put the text in the input
+      setInputValue((prev) => {
+        const combined = prev ? `${prev} ${text}` : text;
+        return combined;
+      });
+    },
+    onInterim: () => {
+      // Interim results shown via voiceTranscript state
+    },
+  });
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -34,9 +55,11 @@ export default function ChatPage() {
     }
   }, [messages, isSending]);
 
-  // Auto-focus input
+  // Auto-focus input (only on desktop — avoids keyboard popup on mobile)
   useEffect(() => {
-    inputRef.current?.focus();
+    if (window.innerWidth > 768) {
+      inputRef.current?.focus();
+    }
   }, [activeSessionId]);
 
   const handleSend = useCallback(() => {
@@ -44,6 +67,10 @@ export default function ChatPage() {
     if (!text || isSending) return;
     setInputValue("");
     sendMessage(text);
+    // Reset textarea height
+    if (inputRef.current) {
+      inputRef.current.style.height = "auto";
+    }
   }, [inputValue, isSending, sendMessage]);
 
   const handleKeyDown = useCallback(
@@ -58,56 +85,73 @@ export default function ChatPage() {
 
   const handleSuggestion = useCallback(
     (text: string) => {
+      if (isSending) return;
       sendMessage(text);
     },
-    [sendMessage],
+    [isSending, sendMessage],
   );
 
+  // Auto-resize textarea
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInputValue(e.target.value);
+    const el = e.target;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+  }, []);
+
   return (
-    <div className="flex h-[calc(100vh-5rem)] flex-col">
-      {/* Header */}
-      <div className="border-b border-yt-gold/20 bg-white px-4 py-3">
+    <div className="flex h-[calc(100dvh-5rem)] flex-col">
+      {/* Header — compact for mobile */}
+      <div className="border-b border-yt-gold/20 bg-white px-4 py-2.5">
         <h1 className="text-base font-semibold text-yt-dark">
           Ask anything
         </h1>
-        <p className="text-[12px] text-yt-dark/40">
-          I can query your data, spot trends, and answer questions
+        <p className="text-[11px] text-yt-dark/40">
+          Query your data, spot trends, get answers
         </p>
       </div>
 
-      {/* Messages */}
+      {/* Messages area */}
       <div
         ref={scrollRef}
-        className="hide-scrollbar flex-1 overflow-y-auto px-4 py-4"
+        className="hide-scrollbar flex-1 overflow-y-auto overscroll-contain px-3 py-3"
       >
         {messages.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-6 px-4">
+          <div className="flex h-full flex-col items-center justify-center gap-5 px-2">
             <div className="text-center">
-              <div className="mb-3 text-4xl">☕</div>
+              <div className="mb-2 text-3xl">☕</div>
               <h2 className="text-lg font-semibold text-yt-dark">
                 Your data, your way
               </h2>
-              <p className="mt-1 text-sm text-yt-dark/50">
-                Ask in plain English — I&apos;ll query the database and show you the answer
+              <p className="mt-1 text-[13px] text-yt-dark/50">
+                Ask in plain English — I&apos;ll query the database and show you
               </p>
             </div>
 
-            {/* Suggestion chips */}
-            <div className="flex flex-wrap justify-center gap-2">
+            {/* Suggestion chips — scrollable on mobile */}
+            <div className="flex max-w-full flex-wrap justify-center gap-2">
               {SUGGESTIONS.map((s) => (
                 <button
                   key={s}
                   type="button"
                   onClick={() => handleSuggestion(s)}
-                  className="rounded-full border border-yt-gold/30 bg-white px-3 py-1.5 text-[12px] text-yt-dark/70 shadow-sm transition-colors hover:border-yt-primary/30 hover:text-yt-primary active:bg-yt-cream"
+                  disabled={isSending}
+                  className="rounded-full border border-yt-gold/30 bg-white px-3 py-1.5 text-[12px] text-yt-dark/70 shadow-sm transition-colors active:scale-[0.97] active:bg-yt-cream disabled:opacity-50"
                 >
                   {s}
                 </button>
               ))}
             </div>
+
+            {/* Voice hint */}
+            {voiceSupported && (
+              <p className="text-[11px] text-yt-dark/30">
+                💡 Tap the mic icon to ask with your voice
+              </p>
+            )}
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {messages.map((msg) => (
               <MessageBubble
                 key={msg.id}
@@ -120,7 +164,7 @@ export default function ChatPage() {
             {/* Typing indicator */}
             {isSending && (
               <div className="flex items-start gap-2">
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-yt-primary text-[11px] text-white">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-yt-primary text-[11px] font-bold text-white">
                   YT
                 </div>
                 <div className="rounded-2xl rounded-tl-sm bg-white px-4 py-3 shadow-sm">
@@ -136,29 +180,79 @@ export default function ChatPage() {
         )}
       </div>
 
-      {/* Input */}
-      <div className="border-t border-yt-gold/20 bg-white px-3 py-2">
+      {/* Voice listening indicator */}
+      {isListening && (
+        <div className="flex items-center justify-center gap-2 border-t border-yt-gold/10 bg-yt-primary/5 px-4 py-2">
+          <div className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
+          <span className="text-[12px] font-medium text-yt-primary">
+            {voiceTranscript || "Listening..."}
+          </span>
+          <button
+            type="button"
+            onClick={toggleListening}
+            className="ml-auto text-[11px] font-medium text-yt-dark/50 underline"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {/* Voice error */}
+      {voiceError && !isListening && (
+        <div className="flex items-center justify-center bg-red-50 px-4 py-1.5">
+          <span className="text-[11px] text-red-600">{voiceError}</span>
+        </div>
+      )}
+
+      {/* Input area */}
+      <div className="border-t border-yt-gold/20 bg-white px-3 py-2 safe-area-bottom">
         <div className="flex items-end gap-2">
+          {/* Voice button */}
+          {voiceSupported && (
+            <button
+              type="button"
+              onClick={toggleListening}
+              disabled={isSending}
+              className={cn(
+                "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-all",
+                isListening
+                  ? "bg-red-500 text-white animate-pulse"
+                  : "bg-yt-cream text-yt-dark/50 active:bg-yt-gold/30",
+                isSending && "opacity-40",
+              )}
+              aria-label={isListening ? "Stop listening" : "Voice input"}
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
+              </svg>
+            </button>
+          )}
+
+          {/* Text input */}
           <textarea
             ref={inputRef}
             value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
+            onChange={handleInputChange}
             onKeyDown={handleKeyDown}
-            placeholder="Ask about your business..."
+            placeholder={isListening ? "Speak now..." : "Ask about your business..."}
             rows={1}
-            className="flex-1 resize-none rounded-xl border border-yt-gold/30 bg-yt-cream/50 px-3 py-2.5 text-[14px] text-yt-dark placeholder:text-yt-dark/30 focus:border-yt-primary/30 focus:outline-none focus:ring-1 focus:ring-yt-primary/20"
+            disabled={isListening}
+            className="flex-1 resize-none rounded-xl border border-yt-gold/30 bg-yt-cream/50 px-3 py-2.5 text-[14px] text-yt-dark placeholder:text-yt-dark/30 focus:border-yt-primary/30 focus:outline-none focus:ring-1 focus:ring-yt-primary/20 disabled:opacity-50"
             style={{ maxHeight: "120px" }}
           />
+
+          {/* Send button */}
           <button
             type="button"
             onClick={handleSend}
             disabled={!inputValue.trim() || isSending}
             className={cn(
-              "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors",
+              "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-all active:scale-95",
               inputValue.trim() && !isSending
                 ? "bg-yt-primary text-white"
                 : "bg-yt-gold/30 text-yt-dark/30",
             )}
+            aria-label="Send message"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
@@ -170,7 +264,9 @@ export default function ChatPage() {
   );
 }
 
+// ---------------------------------------------------------------------------
 // Message bubble component
+// ---------------------------------------------------------------------------
 function MessageBubble({
   role,
   content,
@@ -194,14 +290,14 @@ function MessageBubble({
       {/* Bubble */}
       <div
         className={cn(
-          "max-w-[85%] rounded-2xl px-4 py-3 text-[14px] leading-relaxed",
+          "max-w-[85%] rounded-2xl px-3.5 py-2.5 text-[14px] leading-relaxed",
           isUser
             ? "rounded-tr-sm bg-yt-primary text-white"
             : "rounded-tl-sm bg-white text-yt-dark shadow-sm",
         )}
       >
-        {/* Content */}
-        <div className="whitespace-pre-wrap">{content}</div>
+        {/* Content — support newlines and basic formatting */}
+        <div className="whitespace-pre-wrap break-words">{content}</div>
 
         {/* Widgets indicator */}
         {widgets && widgets.length > 0 && (

@@ -84,13 +84,13 @@ export default function BriefingPage() {
             </div>
           )}
 
-          {/* WhatsApp prompt */}
+          {/* Telegram prompt */}
           <div className="rounded-xl border border-yt-gold/20 bg-yt-light p-4 text-center">
             <p className="text-[13px] text-yt-dark/60">
-              💡 Get this briefing on WhatsApp every morning at 7:30 AM.
+              💡 Get this briefing on Telegram every morning automatically.
             </p>
             <p className="mt-1 text-[11px] text-yt-dark/40">
-              Ask your admin to set up WhatsApp integration.
+              Message @yourstruly_intel_bot on Telegram to get started.
             </p>
           </div>
         </div>

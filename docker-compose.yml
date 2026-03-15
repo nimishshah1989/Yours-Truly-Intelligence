@@ -20,7 +20,6 @@ services:
       - "3000:3000"
     environment:
       - API_URL=http://ytip-backend:8001
-      - NEXT_PUBLIC_API_KEY=${API_KEY:-}
     depends_on:
       - ytip-backend
     networks:

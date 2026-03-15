@@ -24,7 +24,7 @@ from agent.widget_schema import WidgetSpec
 logger = logging.getLogger("ytip.agent")
 
 # Sonnet for speed + quality balance on analytical queries
-MODEL = "claude-sonnet-4-6-20250514"
+MODEL = "claude-sonnet-4-20250514"
 MAX_TOKENS = 4096
 MAX_ITERATIONS = 8
 
@@ -199,5 +199,8 @@ def _get_client() -> Optional[anthropic.Anthropic]:
             logger.error("ANTHROPIC_API_KEY not set — agent is disabled")
             return None
 
-        _client_instance = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+        _client_instance = anthropic.Anthropic(
+            api_key=settings.anthropic_api_key,
+            max_retries=5,  # Handle rate limits gracefully
+        )
         return _client_instance

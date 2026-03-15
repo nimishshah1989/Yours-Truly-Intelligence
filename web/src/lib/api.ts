@@ -1,7 +1,6 @@
-// Empty string → relative URL → goes through Next.js rewrite proxy to backend
-// Set NEXT_PUBLIC_API_URL only to override (e.g. for direct local dev without proxy)
+// Empty string → relative URL → goes through Nginx reverse proxy to backend
+// Nginx injects the API key header so the frontend never needs it
 const BASE_URL = (process.env.NEXT_PUBLIC_API_URL ?? "").trim();
-const API_KEY = (process.env.NEXT_PUBLIC_API_KEY ?? "").trim();
 
 export class ApiError extends Error {
   constructor(
@@ -32,7 +31,6 @@ async function request<T>(
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     "X-Restaurant-ID": getRestaurantId(),
-    ...(API_KEY ? { "X-API-Key": API_KEY } : {}),
     ...(options.headers as Record<string, string> || {}),
   };
 

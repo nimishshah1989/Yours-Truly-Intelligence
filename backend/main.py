@@ -34,8 +34,25 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.warning("etl.scheduler not yet implemented — skipping scheduler start")
         _scheduler_running = False
 
+    # Start Telegram polling (no HTTPS needed)
+    try:
+        from routers.telegram import start_polling as start_tg_polling
+        await start_tg_polling()
+        _telegram_polling = True
+    except Exception as exc:
+        logger.warning("Telegram polling not started: %s", exc)
+        _telegram_polling = False
+
     logger.info("YTIP backend ready")
     yield
+
+    # Stop Telegram polling
+    if _telegram_polling:
+        try:
+            from routers.telegram import stop_polling as stop_tg_polling
+            await stop_tg_polling()
+        except Exception:
+            pass
 
     # Graceful shutdown
     if _scheduler_running:
@@ -94,9 +111,10 @@ from routers.digests import router as digests_router
 from routers.dashboards import router as dashboards_router
 from routers.data_status import router as data_status_router
 
-# Mount routers — Phase 5: WhatsApp + Feed (anti-dashboard)
+# Mount routers — Phase 5: WhatsApp + Feed + Telegram (anti-dashboard)
 from routers.whatsapp import router as whatsapp_router
 from routers.feed import router as feed_router
+from routers.telegram import router as telegram_router
 
 app.include_router(health_router)
 app.include_router(restaurants_router)
@@ -117,6 +135,7 @@ app.include_router(dashboards_router)
 app.include_router(data_status_router)
 app.include_router(whatsapp_router)
 app.include_router(feed_router)
+app.include_router(telegram_router)
 
 
 if __name__ == "__main__":
