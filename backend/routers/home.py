@@ -65,7 +65,7 @@ def home_summary(
 
         # Today's live stats from orders (DailySummary may not exist yet)
         today_row = db.query(
-            func.coalesce(func.sum(Order.subtotal), 0).label("revenue"),
+            func.coalesce(func.sum(Order.net_amount), 0).label("revenue"),
             func.count(Order.id).label("orders"),
         ).filter(
             Order.restaurant_id == restaurant_id,

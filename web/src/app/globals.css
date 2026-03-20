@@ -133,6 +133,33 @@
   scrollbar-width: none;
 }
 
+/* Chat content — proper bullet point and list rendering */
+.chat-content {
+  word-break: break-word;
+}
+
+/* Responsive table wrapper — horizontal scroll on mobile */
+.table-scroll-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-scroll-wrapper::-webkit-scrollbar {
+  height: 4px;
+}
+
+.table-scroll-wrapper::-webkit-scrollbar-thumb {
+  background: #E8C99A;
+  border-radius: 2px;
+}
+
+/* Charts full-width on mobile */
+@media (max-width: 640px) {
+  .recharts-responsive-container {
+    min-width: 0 !important;
+  }
+}
+
 /* Mobile touch improvements */
 @media (hover: none) {
   button {
@@ -143,5 +170,12 @@
 
   html, body {
     overscroll-behavior: none;
+  }
+}
+
+/* Ensure bottom nav doesn't overlap content */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  main {
+    padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
   }
 }

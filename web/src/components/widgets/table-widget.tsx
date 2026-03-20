@@ -115,7 +115,7 @@ export function TableWidget({ data, config }: TableWidgetProps) {
   }
 
   return (
-    <div className="overflow-auto rounded-lg border border-slate-200">
+    <div className="table-scroll-wrapper overflow-auto rounded-lg border border-slate-200">
       <table className="w-full border-collapse text-sm">
         <thead className="sticky top-0 z-10 bg-slate-50">
           {table.getHeaderGroups().map((headerGroup) => (

@@ -3,8 +3,8 @@
 Aggregates Order records into DailySummary rows for fast dashboard queries.
 Idempotent — uses upsert on (restaurant_id, summary_date).
 
-Revenue = SUM(subtotal) for successful orders only (status == 'completed').
-  subtotal is tax-exclusive, matching PetPooja's "Total Sales" definition.
+Revenue = SUM(net_amount) for successful orders only (status == 'completed').
+  net_amount matches PetPooja's "Total Sales" most closely.
 Excludes both cancelled AND complimentary from revenue.
 Order count = COUNT(all orders) including cancelled and complimentary.
 """
@@ -68,7 +68,7 @@ def compute_daily_summary(
         .first()
     )
 
-    total_revenue = int(rev.rev)
+    total_revenue = int(rev.net)  # net_amount = PetPooja "Total Sales"
     net_revenue = int(rev.net)
     total_tax = int(rev.tax)
     total_discounts = int(rev.disc)

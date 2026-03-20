@@ -121,6 +121,11 @@ function CostDashboard() {
         <Card className="lg:col-span-2 rounded-xl border-slate-200">
           <CardHeader className="pb-2">
             <CardTitle className="text-base font-semibold text-slate-800">COGS Trend</CardTitle>
+            {cogsTrend && cogsTrend.length >= 2 && (
+              <p className="text-xs text-slate-500">
+                Yesterday: {formatPrice(cogsTrend[cogsTrend.length - 2]?.cogs ?? 0)} COGS ({(cogsTrend[cogsTrend.length - 2]?.cogs_pct ?? 0).toFixed(1)}% of revenue)
+              </p>
+            )}
           </CardHeader>
           <CardContent>
             {cogsTrend ? (

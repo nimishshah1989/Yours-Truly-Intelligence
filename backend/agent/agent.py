@@ -11,6 +11,7 @@ The loop:
 
 import json
 import logging
+import re
 import threading
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -117,7 +118,7 @@ def run_agent(
 
         # If Claude returned no tool calls, we're done
         if not tool_use_blocks:
-            final_text = "\n".join(text_parts).strip()
+            final_text = _strip_markdown("\n".join(text_parts).strip())
             if not final_text:
                 final_text = "I couldn't generate a response. Please try rephrasing."
             return final_text, widgets
@@ -179,13 +180,26 @@ def run_agent(
         MAX_ITERATIONS,
         restaurant_id,
     )
-    final_text = "\n".join(text_parts).strip()
+    final_text = _strip_markdown("\n".join(text_parts).strip())
     if not final_text:
         final_text = (
             "I ran out of processing steps. Your question may be too complex — "
             "try breaking it into smaller questions."
         )
     return final_text, widgets
+
+
+# -------------------------------------------------------------------------
+# Markdown stripping — chat responses should be plain text
+# -------------------------------------------------------------------------
+def _strip_markdown(text: str) -> str:
+    """Remove common markdown formatting from Claude's response."""
+    text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)  # bold
+    text = re.sub(r'\*(.+?)\*', r'\1', text)  # italic
+    text = re.sub(r'`(.+?)`', r'\1', text)  # inline code
+    text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)  # headers
+    text = re.sub(r'^\s*[-*]\s+', '• ', text, flags=re.MULTILINE)  # bullets
+    return text
 
 
 # -------------------------------------------------------------------------

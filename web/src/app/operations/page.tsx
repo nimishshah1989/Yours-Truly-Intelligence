@@ -92,14 +92,14 @@ function OpsStatCards() {
 
   if (isLoading || !cards) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         {Array.from({ length: 3 }).map((_, i) => <StatCardSkeleton key={i} />)}
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
       {cards.map((card) => <StatCard key={card.label} data={card} />)}
     </div>
   );
@@ -117,6 +117,7 @@ function SeatHourHeatmap() {
     <Card className="rounded-xl border-slate-200">
       <CardHeader>
         <CardTitle className="text-base text-slate-800">Seat-Hour Revenue</CardTitle>
+        <p className="text-xs text-slate-500">Revenue per seat by hour and day of week</p>
       </CardHeader>
       <CardContent>
         <HeatmapWidget
@@ -222,6 +223,7 @@ function DaypartProfitabilityChart() {
     <Card className="rounded-xl border-slate-200">
       <CardHeader>
         <CardTitle className="text-base text-slate-800">Daypart Profitability</CardTitle>
+        <p className="text-xs text-slate-500">Revenue and cost breakdown by time of day</p>
       </CardHeader>
       <CardContent>
         <BarChartWidget

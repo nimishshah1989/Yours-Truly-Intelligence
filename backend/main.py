@@ -117,6 +117,10 @@ from routers.feed import router as feed_router
 from routers.telegram import router as telegram_router
 from routers.features import router as features_router
 
+# Mount routers — Intelligence & Analytics
+from routers.intelligence import router as intelligence_router
+from routers.analytics import router as analytics_router
+
 app.include_router(health_router)
 app.include_router(restaurants_router)
 app.include_router(revenue_router)
@@ -138,6 +142,8 @@ app.include_router(whatsapp_router)
 app.include_router(feed_router)
 app.include_router(telegram_router)
 app.include_router(features_router)
+app.include_router(intelligence_router)
+app.include_router(analytics_router)
 
 
 if __name__ == "__main__":

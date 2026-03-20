@@ -21,16 +21,16 @@ export function ChatMessage({ role, content, widgets }: ChatMessageProps) {
           "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-medium",
           isUser
             ? "bg-slate-100 text-slate-600"
-            : "bg-teal-50 text-teal-700"
+            : "bg-yt-primary/10 text-yt-primary"
         )}
       >
-        {isUser ? "You" : "AI"}
+        {isUser ? "You" : "YT"}
       </div>
 
       {/* Message content */}
       <div
         className={cn(
-          "max-w-[80%] space-y-3",
+          "max-w-[85%] space-y-3",
           isUser && "text-right"
         )}
       >
@@ -38,15 +38,13 @@ export function ChatMessage({ role, content, widgets }: ChatMessageProps) {
           className={cn(
             "inline-block rounded-xl px-4 py-2.5 text-sm leading-relaxed",
             isUser
-              ? "bg-teal-600 text-white"
-              : "bg-white border border-slate-200 text-foreground"
+              ? "bg-yt-primary text-white"
+              : "bg-white border border-yt-gold/20 text-foreground shadow-sm"
           )}
         >
-          {content.split("\n").map((line, i) => (
-            <p key={i} className={i > 0 ? "mt-1" : undefined}>
-              {line || "\u00A0"}
-            </p>
-          ))}
+          <div className="whitespace-pre-wrap break-words chat-content">
+            {content}
+          </div>
         </div>
 
         {/* Render widgets inline */}
@@ -55,12 +53,17 @@ export function ChatMessage({ role, content, widgets }: ChatMessageProps) {
             {widgets.map((widget, i) => (
               <div
                 key={i}
-                className="rounded-xl border border-slate-200 bg-white p-4"
+                className="rounded-xl border border-yt-gold/20 bg-white p-4 shadow-sm"
               >
                 {widget.title && (
-                  <h4 className="mb-2 text-sm font-semibold text-slate-800">
+                  <h4 className="mb-2 text-sm font-semibold text-yt-dark">
                     {widget.title}
                   </h4>
+                )}
+                {widget.subtitle && (
+                  <p className="mb-2 text-xs text-yt-dark/50">
+                    {widget.subtitle}
+                  </p>
                 )}
                 <WidgetRenderer widget={widget} />
               </div>

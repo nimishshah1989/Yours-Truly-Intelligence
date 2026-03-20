@@ -126,10 +126,20 @@ function RevenueTrendChart() {
 
   const trend = data as { date: string; revenue: number; net_revenue: number; orders: number }[];
 
+  // Compute insight subtitle from the trend data (use second-to-last point = yesterday)
+  const yesterdayIdx = trend.length >= 2 ? trend.length - 2 : trend.length - 1;
+  const yesterdayData = trend[yesterdayIdx];
+  const insightText = yesterdayData
+    ? `Yesterday: ${formatPrice(yesterdayData.revenue)} gross, ${formatNumber(yesterdayData.orders)} orders`
+    : undefined;
+
   return (
     <Card className="rounded-xl border-slate-200">
       <CardHeader>
         <CardTitle className="text-base text-slate-800">Revenue Trend</CardTitle>
+        {insightText && (
+          <p className="text-xs text-slate-500">{insightText}</p>
+        )}
       </CardHeader>
       <CardContent>
         <LineChartWidget
@@ -167,10 +177,21 @@ function PaymentModePie() {
     value: m.revenue,
   }));
 
+  // Compute insight: top payment mode
+  const topMode = pieData.length > 0
+    ? pieData.reduce((a, b) => (a.value > b.value ? a : b))
+    : null;
+  const paymentInsight = topMode
+    ? `${topMode.name} leads with ${formatPrice(topMode.value)}`
+    : undefined;
+
   return (
     <Card className="rounded-xl border-slate-200">
       <CardHeader>
         <CardTitle className="text-base text-slate-800">Payment Mode Split</CardTitle>
+        {paymentInsight && (
+          <p className="text-xs text-slate-500">{paymentInsight}</p>
+        )}
       </CardHeader>
       <CardContent>
         <PieChartWidget
