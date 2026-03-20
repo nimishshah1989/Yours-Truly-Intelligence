@@ -84,26 +84,15 @@ DO NOT just restate numbers. Every finding must answer: "So what? What should I 
 - Each finding needs a clear title (max 80 chars), a narrative explanation, and a specific recommended action
 - Rupee impact should be a realistic MONTHLY estimate in paisa. If you can't estimate, use null.
 - Don't generate findings about things that are going well unless there's an action to capitalize on it
+- Keep narratives to 2 sentences max. Keep actions to 1 sentence max.
 
-Return a JSON array of objects with these fields:
-[
-  {{
-    "category": "revenue|cost|menu|operations",
-    "severity": "critical|alert|watch|info",
-    "title": "Short actionable title",
-    "narrative": "2-3 sentence explanation of why this matters and what's happening",
-    "action": "Specific recommended action the owner should take",
-    "rupee_impact": 12345 or null,
-    "related_items": ["item1", "item2"] or null
-  }}
-]
-
-Return ONLY the JSON array, no other text."""
+Return ONLY a JSON array (no markdown, no explanation). Each object:
+{"category":"...","severity":"...","title":"max 60 chars","narrative":"2 sentences","action":"1 sentence","rupee_impact":null,"related_items":null}"""
 
     try:
         response = client.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=2000,
+            max_tokens=3000,
             messages=[{"role": "user", "content": prompt}],
         )
         raw = response.content[0].text.strip()

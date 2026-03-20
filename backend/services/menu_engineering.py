@@ -48,7 +48,14 @@ def get_top_items(db: Session, rid: int, start: date, end: date, limit: int = 15
     ]
     by_rev = sorted(items, key=lambda x: x["revenue"], reverse=True)[:limit]
     by_qty = sorted(items, key=lambda x: x["quantity"], reverse=True)[:limit]
-    return {"by_revenue": by_rev, "by_quantity": by_qty}
+    total_quantity = sum(i["quantity"] for i in items)
+    total_unique = len(items)
+    return {
+        "by_revenue": by_rev,
+        "by_quantity": by_qty,
+        "total_quantity": total_quantity,
+        "total_unique": total_unique,
+    }
 
 
 def get_bcg_matrix(db: Session, rid: int, start: date, end: date):
@@ -286,7 +293,13 @@ def get_dead_skus(db: Session, rid: int, start: date, end: date):
             sales_sub.c.last_ordered,
         )
         .outerjoin(sales_sub, MenuItem.id == sales_sub.c.menu_item_id)
-        .filter(MenuItem.restaurant_id == rid, MenuItem.is_active.is_(True))
+        .filter(
+            MenuItem.restaurant_id == rid,
+            MenuItem.is_active.is_(True),
+            ~MenuItem.category.ilike("Add on%"),
+            ~MenuItem.category.ilike("Bookings%"),
+            ~MenuItem.name.ilike("Add On%"),
+        )
         .having(func.coalesce(sales_sub.c.orders_in_period, 0) < 3)
         .group_by(MenuItem.name, MenuItem.category, MenuItem.base_price,
                    sales_sub.c.orders_in_period, sales_sub.c.last_ordered)
