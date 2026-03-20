@@ -450,3 +450,47 @@ def intelligence_insight(
     except Exception as exc:
         logger.error("Intelligence insight failed: %s", exc)
         return InsightResponse(narrative=None, generated=False)
+
+
+# ---------------------------------------------------------------------------
+# POST /api/intelligence/generate — Run Claude deep analysis
+# ---------------------------------------------------------------------------
+class GenerateResponse(BaseModel):
+    findings_created: int
+    status: str
+
+
+@router.post("/generate", response_model=GenerateResponse)
+def generate_intelligence(
+    restaurant_id: int = Depends(get_restaurant_id),
+    db: Session = Depends(get_readonly_db),
+) -> GenerateResponse:
+    """Run Claude deep analysis on recent data and create findings."""
+    from database import SessionLocal
+    from services.insight_generator import generate_deep_insights
+
+    try:
+        # Use a writable session for inserts
+        write_db = SessionLocal()
+
+        # Clear old Claude-generated findings (keep mechanical ones)
+        write_db.query(IntelligenceFinding).filter(
+            IntelligenceFinding.restaurant_id == restaurant_id,
+            IntelligenceFinding.detail["source"].astext == "claude_deep_analysis",
+        ).delete(synchronize_session=False)
+
+        findings = generate_deep_insights(write_db, restaurant_id)
+        for f in findings:
+            write_db.add(f)
+        write_db.commit()
+        write_db.close()
+
+        return GenerateResponse(
+            findings_created=len(findings),
+            status="ok",
+        )
+    except Exception as exc:
+        logger.error("Generate intelligence failed: %s", exc)
+        raise HTTPException(
+            status_code=500, detail="Failed to generate intelligence"
+        ) from exc
