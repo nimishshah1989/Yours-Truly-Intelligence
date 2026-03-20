@@ -123,7 +123,19 @@ def run_agent(
             return final_text, widgets
 
         # Claude wants to use tools — add its response to message history
-        messages.append({"role": "assistant", "content": response.content})
+        # Serialize content blocks to dicts to avoid Pydantic version issues
+        serialized_content = []
+        for block in response.content:
+            if block.type == "text":
+                serialized_content.append({"type": "text", "text": block.text})
+            elif block.type == "tool_use":
+                serialized_content.append({
+                    "type": "tool_use",
+                    "id": block.id,
+                    "name": block.name,
+                    "input": block.input,
+                })
+        messages.append({"role": "assistant", "content": serialized_content})
 
         # Execute each tool and collect results
         tool_results: List[Dict[str, Any]] = []

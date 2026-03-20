@@ -330,6 +330,70 @@ async def generate_insight_cards() -> None:
 
 
 # ------------------------------------------------------------------
+# Job: nightly COGS enrichment (1:30 AM IST)
+# ------------------------------------------------------------------
+
+async def run_nightly_cogs() -> None:
+    """Daily 1:30 AM IST: enrich yesterday's orders with COGS from inventory API."""
+    logger.info("[scheduler] Running nightly COGS enrichment")
+
+    db = SessionLocal()
+    try:
+        from ingestion.petpooja_inventory import ingest_inventory_cogs
+
+        restaurants = _get_active_restaurants(db)
+        yesterday = date.today() - timedelta(days=1)
+        for restaurant in restaurants:
+            try:
+                orders, items = ingest_inventory_cogs(restaurant, db, yesterday)
+                db.commit()
+                logger.info(
+                    "[scheduler] COGS OK: restaurant=%s date=%s orders=%d items=%d",
+                    restaurant.id, yesterday, orders, items,
+                )
+            except Exception as exc:
+                db.rollback()
+                logger.error(
+                    "[scheduler] COGS FAILED: restaurant=%s error=%s",
+                    restaurant.id, exc,
+                )
+    finally:
+        db.close()
+
+
+# ------------------------------------------------------------------
+# Job: nightly daily summary (2:00 AM IST)
+# ------------------------------------------------------------------
+
+async def run_nightly_summary() -> None:
+    """Daily 2 AM IST: compute daily summary for yesterday."""
+    logger.info("[scheduler] Running nightly daily summary")
+
+    db = SessionLocal()
+    try:
+        from compute.daily_summary import compute_daily_summary
+
+        restaurants = _get_active_restaurants(db)
+        yesterday = date.today() - timedelta(days=1)
+        for restaurant in restaurants:
+            try:
+                summary = compute_daily_summary(db, restaurant.id, yesterday)
+                db.commit()
+                logger.info(
+                    "[scheduler] Summary OK: restaurant=%s date=%s revenue=%d",
+                    restaurant.id, yesterday, summary.total_revenue,
+                )
+            except Exception as exc:
+                db.rollback()
+                logger.error(
+                    "[scheduler] Summary FAILED: restaurant=%s error=%s",
+                    restaurant.id, exc,
+                )
+    finally:
+        db.close()
+
+
+# ------------------------------------------------------------------
 # Job: nightly pattern detection (2:30 AM IST)
 # ------------------------------------------------------------------
 
@@ -442,8 +506,20 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
     scheduler.add_job(
-        generate_insight_cards,
+        run_nightly_cogs,
+        CronTrigger(hour=1, minute=30, timezone=TIMEZONE),
+        id="nightly_cogs",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        run_nightly_summary,
         CronTrigger(hour=2, minute=0, timezone=TIMEZONE),
+        id="nightly_summary",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        generate_insight_cards,
+        CronTrigger(hour=2, minute=15, timezone=TIMEZONE),
         id="nightly_insight_cards",
         replace_existing=True,
     )

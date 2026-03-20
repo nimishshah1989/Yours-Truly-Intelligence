@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from database import get_readonly_db
 from dependencies import date_to_ist_range, get_restaurant_id, safe_pct_change
-from models import Customer, DailySummary, IntelligenceFinding, Order
+from models import DailySummary, IntelligenceFinding, Order
 from services.analytics_service import IST, today_ist
 
 logger = logging.getLogger("ytip.home")
@@ -65,7 +65,7 @@ def home_summary(
 
         # Today's live stats from orders (DailySummary may not exist yet)
         today_row = db.query(
-            func.coalesce(func.sum(Order.total_amount), 0).label("revenue"),
+            func.coalesce(func.sum(Order.subtotal), 0).label("revenue"),
             func.count(Order.id).label("orders"),
         ).filter(
             Order.restaurant_id == restaurant_id,
@@ -103,12 +103,12 @@ def home_summary(
 
         rev_sparkline = [int(r.total_revenue) for r in sparkline_rows]
 
-        # Active customers (visited in last 30 days)
-        thirty_ago = today - timedelta(days=30)
-        active_customers = db.query(func.count(Customer.id)).filter(
-            Customer.restaurant_id == restaurant_id,
-            Customer.last_visit >= thirty_ago,
-        ).scalar() or 0
+        # 7-day average daily revenue for context
+        avg_7d_revenue = (
+            sum(rev_sparkline) // max(len(rev_sparkline), 1)
+            if rev_sparkline
+            else 0
+        )
 
         stats = [
             StatCardResponse(
@@ -133,9 +133,11 @@ def home_summary(
                 prefix="₹",
             ),
             StatCardResponse(
-                label="Active Customers",
-                value=str(active_customers),
-                suffix=" (30d)",
+                label="7-Day Avg Revenue",
+                value=str(avg_7d_revenue),
+                raw_value=avg_7d_revenue,
+                sparkline=rev_sparkline,
+                prefix="₹",
             ),
         ]
 

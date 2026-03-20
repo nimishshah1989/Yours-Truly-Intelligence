@@ -150,7 +150,8 @@ def _classify_item(item_name: str, consumed: List[Dict]) -> str:
         return "retail"
 
     unique_materials = len(set(
-        str(c.get("rawmaterialid", "")) for c in consumed if c.get("rawmaterialid")
+        str(c.get("rawmaterialname", "")).strip().lower()
+        for c in consumed if c.get("rawmaterialname")
     ))
 
     if unique_materials >= 2:
@@ -235,15 +236,17 @@ def ingest_inventory_cogs(
 
                     # Also store consumed[] as OrderItemConsumption records
                     for c in consumed:
-                        rm_id = str(c.get("rawmaterialid", ""))
-                        if not rm_id:
+                        rm_name = str(c.get("rawmaterialname", "")).strip()
+                        if not rm_name:
                             continue
+                        # Use sapcode if available, else derive from name
+                        rm_id = str(c.get("rawmaterialsapcode", "")).strip() or rm_name[:50]
                         existing_consumption = (
                             db.query(OrderItemConsumption)
                             .filter(
                                 OrderItemConsumption.order_id == order.id,
                                 OrderItemConsumption.order_item_id == db_item.id,
-                                OrderItemConsumption.rm_id == rm_id,
+                                OrderItemConsumption.rm_name == rm_name,
                             )
                             .first()
                         )
@@ -252,7 +255,7 @@ def ingest_inventory_cogs(
                                 order_id=order.id,
                                 order_item_id=db_item.id,
                                 rm_id=rm_id,
-                                rm_name=str(c.get("rawmaterialname", "")),
+                                rm_name=rm_name,
                                 quantity_consumed=float(c.get("rawmaterialquantity", 0) or 0),
                                 unit=str(c.get("unitname", "")),
                                 price_per_unit=float(c.get("price", 0) or 0),
