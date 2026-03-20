@@ -35,11 +35,12 @@ def get_overview(
     custom_start: Optional[date] = None,
     custom_end: Optional[date] = None,
 ) -> Dict[str, Any]:
-    """Revenue overview: today stats, WoW change, MoM change, 7-day sparkline."""
+    """Revenue overview: yesterday stats (T-1), WoW change, MoM change, 7-day sparkline."""
     today = today_ist()
+    yesterday = today - timedelta(days=1)
 
-    # Today's live stats from orders (DailySummary may not exist yet for today)
-    start_dt, end_dt = date_to_ist_range(today, today)
+    # Yesterday's stats (T-1 data from PetPooja)
+    start_dt, end_dt = date_to_ist_range(yesterday, yesterday)
     today_q = _base_order_query(db, restaurant_id).filter(
         Order.ordered_at >= start_dt, Order.ordered_at <= end_dt
     )
@@ -54,7 +55,7 @@ def get_overview(
     avg_ticket = today_revenue // today_orders if today_orders > 0 else 0
 
     # WoW: same day last week from DailySummary
-    last_week_day = today - timedelta(days=7)
+    last_week_day = yesterday - timedelta(days=7)
     lw_summary = (
         db.query(DailySummary)
         .filter(

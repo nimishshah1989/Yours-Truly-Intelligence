@@ -70,6 +70,16 @@ function MenuDashboard() {
       .map((cat) => ({ key: cat, name: cat }));
   }, [categoryMixRows]);
 
+  // Derive actionable insights from data
+  const topRevItem = top?.by_revenue?.[0];
+  const topQtyItem = top?.by_quantity?.[0];
+  const revenueConcentration = useMemo(() => {
+    if (!top?.by_revenue?.length) return 0;
+    const totalRev = top.by_revenue.reduce((s, i) => s + i.revenue, 0);
+    const top3Rev = top.by_revenue.slice(0, 3).reduce((s, i) => s + i.revenue, 0);
+    return totalRev > 0 ? Math.round((top3Rev / totalRev) * 100) : 0;
+  }, [top]);
+
   return (
     <div className="space-y-6">
       {/* Row 1 — Stat Cards */}
@@ -112,6 +122,16 @@ function MenuDashboard() {
         )}
       </div>
 
+      {/* Insight below top items */}
+      {top && topRevItem && topQtyItem && (
+        <InsightBox>
+          Your top 3 items drive {revenueConcentration}% of revenue.{" "}
+          {topRevItem.name === topQtyItem.name
+            ? `${topRevItem.name} leads both revenue and volume — it's your star performer. Consider a premium variant or combo to increase ticket size.`
+            : `${topRevItem.name} leads revenue while ${topQtyItem.name} leads volume. Consider bundling them together — a high-volume item paired with a high-margin item can boost both.`}
+        </InsightBox>
+      )}
+
       {/* Row 3 — BCG Matrix (2/3) + Category Mix Trend (1/3) */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {loadingBcg ? (
@@ -130,6 +150,11 @@ function MenuDashboard() {
                 quadrantLabels: { topLeft: "Premium", topRight: "Stars", bottomLeft: "Dogs", bottomRight: "Drivers" },
               }}
             />
+            <p className="mt-3 text-xs leading-relaxed text-slate-500">
+              <span className="font-semibold text-slate-700">How to read:</span>{" "}
+              Stars (top-right) are your best performers — protect these. Drivers (bottom-right) sell well but at low margins — explore price increases.
+              Premium items (top-left) have high margins but low volume — promote these. Dogs (bottom-left) are candidates for removal or reinvention.
+            </p>
           </ChartCard>
         )}
 
@@ -145,17 +170,19 @@ function MenuDashboard() {
       {/* Row 4 — Item Affinity Map (full width) */}
       {loadingAffinity ? (
         <ChartSkeleton height="h-[420px]" />
-      ) : (
-        <ChartCard title="Item Affinity Map">
+      ) : affinityGraph && (
+        <ChartCard title="Item Affinity Map — What's Ordered Together">
           <NetworkGraphWidget data={(affinityGraph ?? { nodes: [], edges: [] }) as Record<string, unknown>} />
+          <p className="mt-3 text-xs leading-relaxed text-slate-500">
+            <span className="font-semibold text-slate-700">Action:</span>{" "}
+            Thicker connections = frequently ordered together. Use these pairs for combo offers and suggestive selling training for staff.
+          </p>
         </ChartCard>
       )}
 
       {/* Row 5 — Dead SKU Table (full width) */}
-      {loadingDead ? (
-        <ChartSkeleton height="h-[260px]" />
-      ) : (
-        <ChartCard title="Dead SKUs — Low / No Orders">
+      {!loadingDead && deadSkuRows.length > 0 && (
+        <ChartCard title={`Dead SKUs — ${deadSkuRows.length} Items Need Attention`}>
           <TableWidget
             data={deadSkuRows}
             config={{
@@ -168,8 +195,23 @@ function MenuDashboard() {
               sortable: true,
             }}
           />
+          <p className="mt-3 text-xs leading-relaxed text-slate-500">
+            <span className="font-semibold text-slate-700">Action:</span>{" "}
+            These items had minimal orders. Each dead SKU adds complexity without revenue. Consider removing, repricing, or running a limited-time promotion to test demand.
+          </p>
         </ChartCard>
       )}
+    </div>
+  );
+}
+
+function InsightBox({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border border-blue-100 bg-gradient-to-r from-blue-50 to-indigo-50 px-4 py-3">
+      <div className="flex items-start gap-2">
+        <span className="mt-0.5 text-sm">🧠</span>
+        <p className="text-[13px] leading-relaxed text-blue-900">{children}</p>
+      </div>
     </div>
   );
 }

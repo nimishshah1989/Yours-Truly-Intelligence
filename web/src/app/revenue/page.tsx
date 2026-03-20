@@ -81,15 +81,15 @@ function RevenueStatCards() {
 
   const cards: StatCardData[] = [
     {
-      label: "Today's Revenue",
+      label: "Yesterday's Revenue",
       value: formatPrice(overview.today_revenue),
       change: overview.wow_change ?? undefined,
       changeLabel: "vs last week",
     },
     {
-      label: "Orders Today",
+      label: "Orders Yesterday",
       value: formatNumber(overview.today_orders),
-      changeLabel: "today",
+      changeLabel: "yesterday",
     },
     {
       label: "Avg Ticket Size",
