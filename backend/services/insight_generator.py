@@ -87,7 +87,7 @@ DO NOT just restate numbers. Every finding must answer: "So what? What should I 
 - Keep narratives to 2 sentences max. Keep actions to 1 sentence max.
 
 Return ONLY a JSON array (no markdown, no explanation). Each object:
-{"category":"...","severity":"...","title":"max 60 chars","narrative":"2 sentences","action":"1 sentence","rupee_impact":null,"related_items":null}"""
+{{"category":"...","severity":"...","title":"max 60 chars","narrative":"2 sentences","action":"1 sentence","rupee_impact":null,"related_items":null}}"""
 
     try:
         response = client.messages.create(
