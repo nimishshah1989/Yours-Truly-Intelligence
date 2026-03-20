@@ -98,3 +98,16 @@ export function useIntelligenceOperations() {
     { refreshInterval: 300_000 },
   );
 }
+
+export interface InsightResponse {
+  narrative: string | null;
+  generated: boolean;
+}
+
+export function useIntelligenceInsight() {
+  return useSWR<InsightResponse>(
+    "/api/intelligence/insight",
+    fetcher<InsightResponse>,
+    { refreshInterval: 600_000 },
+  );
+}

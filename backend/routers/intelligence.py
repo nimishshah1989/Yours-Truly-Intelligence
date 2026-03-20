@@ -354,3 +354,78 @@ def intelligence_operations(
         raise HTTPException(
             status_code=500, detail="Failed to load operations intelligence"
         ) from exc
+
+
+# ---------------------------------------------------------------------------
+# GET /api/intelligence/insight — Claude-generated narrative for home page
+# ---------------------------------------------------------------------------
+class InsightResponse(BaseModel):
+    narrative: Optional[str] = None
+    generated: bool = False
+
+
+@router.get("/insight", response_model=InsightResponse)
+def intelligence_insight(
+    restaurant_id: int = Depends(get_restaurant_id),
+    db: Session = Depends(get_readonly_db),
+) -> InsightResponse:
+    """Claude-generated narrative insight for the home page."""
+    try:
+        from services.insight_generator import generate_home_insight
+
+        # Get quick stats
+        yesterday = today_ist() - timedelta(days=1)
+        summary = (
+            db.query(DailySummary)
+            .filter(
+                DailySummary.restaurant_id == restaurant_id,
+                DailySummary.summary_date == yesterday,
+            )
+            .first()
+        )
+
+        stats = {
+            "revenue_yesterday": summary.total_revenue if summary else 0,
+            "orders_yesterday": summary.total_orders if summary else 0,
+            "avg_ticket": (
+                summary.avg_order_value
+                if summary and summary.avg_order_value
+                else 0
+            ),
+            "cogs_pct": None,
+        }
+
+        # Get findings summary
+        all_findings = (
+            db.query(IntelligenceFinding)
+            .filter(
+                IntelligenceFinding.restaurant_id == restaurant_id,
+                IntelligenceFinding.is_actioned.is_(False),
+            )
+            .all()
+        )
+
+        # Find top category
+        cat_counts: Dict[str, int] = {}
+        for f in all_findings:
+            display = _CAT_TO_DISPLAY.get(f.category, "operations")
+            cat_counts[display] = cat_counts.get(display, 0) + 1
+
+        top_cat = max(cat_counts, key=cat_counts.get) if cat_counts else "none"
+
+        findings_summary = {
+            "total_findings": len(all_findings),
+            "top_category": top_cat,
+            "top_category_count": cat_counts.get(top_cat, 0),
+        }
+
+        narrative = generate_home_insight(stats, findings_summary)
+
+        return InsightResponse(
+            narrative=narrative,
+            generated=narrative is not None,
+        )
+
+    except Exception as exc:
+        logger.error("Intelligence insight failed: %s", exc)
+        return InsightResponse(narrative=None, generated=False)

@@ -10,6 +10,7 @@ import {
   useIntelligenceCost,
   useIntelligenceMenu,
   useIntelligenceOperations,
+  useIntelligenceInsight,
 } from "@/hooks/use-intelligence";
 import { FindingCard } from "@/components/intelligence/finding-card";
 import { CategoryTab } from "@/components/intelligence/category-tab";
@@ -125,6 +126,7 @@ export default function IntelligenceDashboard() {
 function OverviewTab() {
   const { data: moneyFound } = useMoneyFound();
   const { data: summary, isLoading } = useIntelligenceSummary();
+  const { data: insight } = useIntelligenceInsight();
 
   if (isLoading) {
     return (
@@ -148,7 +150,7 @@ function OverviewTab() {
               </p>
               <p className="mt-1 text-2xl font-bold text-amber-900">
                 {formatPrice(moneyFound.total_impact_paisa)}
-                <span className="text-sm font-normal text-amber-600">/year</span>
+                <span className="text-sm font-normal text-amber-600">/month</span>
               </p>
               <p className="mt-0.5 text-xs text-amber-600">
                 {moneyFound.finding_count} finding{moneyFound.finding_count !== 1 ? "s" : ""} need attention
@@ -172,6 +174,21 @@ function OverviewTab() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Claude insight */}
+      {insight?.narrative && (
+        <div className="rounded-xl border border-yt-primary/20 bg-gradient-to-r from-slate-50 to-white p-4 shadow-sm">
+          <div className="mb-2 flex items-center gap-2">
+            <span className="text-base">🧠</span>
+            <h3 className="text-[13px] font-semibold text-yt-dark">
+              Chief of Staff Insight
+            </h3>
+          </div>
+          <p className="text-[13px] leading-relaxed text-yt-dark/70">
+            {insight.narrative}
+          </p>
         </div>
       )}
 

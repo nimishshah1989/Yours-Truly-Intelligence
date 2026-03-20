@@ -87,14 +87,11 @@ def detect_food_cost_trend(
         last_pct = week_pcts[-1]["pct"]
         delta = round(last_pct - first_pct, 1)
 
-        # ₹ impact: each 1% of food cost on ₹1Cr annual revenue = ₹1L/year
-        # Estimate based on current monthly revenue extrapolated
+        # ₹ impact: delta percentage points × monthly revenue
         recent_monthly_rev = sum(
             s.total_revenue for s in summaries[-30:]
         )
-        annual_rev_est = recent_monthly_rev * 12
-        # Impact = delta percentage points × annual revenue
-        impact_paisa = int((delta / 100) * annual_rev_est)
+        impact_paisa = int((delta / 100) * recent_monthly_rev)
 
         findings.append(IntelligenceFinding(
             restaurant_id=restaurant_id,
@@ -178,7 +175,7 @@ def detect_revenue_anomaly(
                 "baseline_weeks": len(same_dow),
             },
             related_items=None,
-            rupee_impact=int((avg_rev - actual) * 52),  # annualized shortfall
+            rupee_impact=int(avg_rev - actual),  # single-day shortfall in paisa
         ))
 
     return findings

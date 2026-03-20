@@ -61,17 +61,18 @@ def home_summary(
     """Executive summary for the home page."""
     try:
         today = today_ist()
-        today_start, today_end = date_to_ist_range(today, today)
+        yesterday = today - timedelta(days=1)
+        yday_start, yday_end = date_to_ist_range(yesterday, yesterday)
 
-        # Today's live stats from orders (DailySummary may not exist yet)
+        # Yesterday's stats (T-1 data from PetPooja)
         today_row = db.query(
             func.coalesce(func.sum(Order.net_amount), 0).label("revenue"),
             func.count(Order.id).label("orders"),
         ).filter(
             Order.restaurant_id == restaurant_id,
             Order.is_cancelled.is_(False),
-            Order.ordered_at >= today_start,
-            Order.ordered_at <= today_end,
+            Order.ordered_at >= yday_start,
+            Order.ordered_at <= yday_end,
         ).one()
 
         today_revenue = int(today_row.revenue)
@@ -79,7 +80,7 @@ def home_summary(
         today_aov = today_revenue // max(today_orders, 1)
 
         # Same day last week for WoW comparison
-        lw_date = today - timedelta(days=7)
+        lw_date = yesterday - timedelta(days=7)
         lw_summary = db.query(DailySummary).filter(
             DailySummary.restaurant_id == restaurant_id,
             DailySummary.summary_date == lw_date,
@@ -112,7 +113,7 @@ def home_summary(
 
         stats = [
             StatCardResponse(
-                label="Today's Revenue",
+                label="Yesterday's Revenue",
                 value=str(today_revenue),
                 raw_value=today_revenue,
                 change=wow_rev_change,
@@ -121,7 +122,7 @@ def home_summary(
                 prefix="₹",
             ),
             StatCardResponse(
-                label="Orders Today",
+                label="Orders Yesterday",
                 value=str(today_orders),
                 change=wow_orders_change,
                 change_label="vs last week",

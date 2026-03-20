@@ -167,10 +167,32 @@ def generate_morning_briefing(
         footer = "\n_Reply with any question — or send a voice note._"
         whatsapp_message = header + "\n\n" + "\n\n".join(section_texts) + footer
 
+        # Generate Claude narrative insight
+        from services.insight_generator import generate_briefing_narrative
+
+        metrics_for_insight = {
+            "yesterday": yesterday,
+            "same_day_last_week": same_day_last_week,
+            "last_7_days": last_7_days,
+            "top_items": top_items,
+        }
+        narrative = generate_briefing_narrative(
+            metrics_for_insight, sections, anomalies,
+        )
+
+        # Insert narrative as the first section if generated
+        if narrative:
+            sections.insert(0, {
+                "emoji": "🧠",
+                "title": "Chief of Staff Insight",
+                "body": narrative,
+            })
+
         return {
             "whatsapp_message": whatsapp_message,
             "sections": sections,
             "anomalies": anomalies,
+            "narrative": narrative,
             "metrics": {
                 "yesterday": yesterday,
                 "same_day_last_week": same_day_last_week,
