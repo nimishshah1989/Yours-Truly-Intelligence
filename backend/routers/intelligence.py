@@ -384,6 +384,27 @@ def intelligence_insight(
             .first()
         )
 
+        # Compute COGS % from order_items
+        cogs_pct = None
+        cogs_row = (
+            db.query(
+                func.coalesce(
+                    func.sum(OrderItem.cost_price * OrderItem.quantity), 0
+                ).label("cogs"),
+                func.coalesce(func.sum(OrderItem.total_price), 0).label("rev"),
+            )
+            .join(Order, Order.id == OrderItem.order_id)
+            .filter(
+                OrderItem.restaurant_id == restaurant_id,
+                Order.ordered_at >= yesterday,
+                Order.ordered_at < today_ist(),
+                Order.is_cancelled.is_(False),
+            )
+            .first()
+        )
+        if cogs_row and int(cogs_row.rev) > 0 and int(cogs_row.cogs) > 0:
+            cogs_pct = round(int(cogs_row.cogs) / int(cogs_row.rev) * 100, 1)
+
         stats = {
             "revenue_yesterday": summary.total_revenue if summary else 0,
             "orders_yesterday": summary.total_orders if summary else 0,
@@ -392,7 +413,7 @@ def intelligence_insight(
                 if summary and summary.avg_order_value
                 else 0
             ),
-            "cogs_pct": None,
+            "cogs_pct": cogs_pct,
         }
 
         # Get findings summary
