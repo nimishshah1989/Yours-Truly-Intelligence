@@ -14,6 +14,7 @@ import { formatPrice } from "@/lib/utils";
 import {
   useCogsTrend, useVendorPriceCreep, useFoodCostGap,
   usePurchaseCalendar, useMarginWaterfall, useIngredientVolatility,
+  usePortionDrift,
 } from "@/hooks/use-cost";
 import type { StatCardData } from "@/lib/types";
 
@@ -80,6 +81,8 @@ function CostDashboard() {
   const { data: purchaseCalRaw } = usePurchaseCalendar();
   const { data: waterfallRaw } = useMarginWaterfall();
   const { data: volatilityRaw } = useIngredientVolatility();
+  const { data: portionDriftRaw } = usePortionDrift();
+  const portionDrift = portionDriftRaw?.data;
 
   // Unwrap the { data: [...] } wrapper that all these endpoints return
   const cogsTrend = cogsTrendRaw?.data as CogsDayRow[] | undefined;
@@ -232,6 +235,31 @@ function CostDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Row 6 — Portion Drift (full width, conditional) */}
+      {portionDrift && portionDrift.length > 0 && (
+        <div className="mt-6">
+          <Card className="rounded-xl border-slate-200">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base font-semibold text-slate-800">
+                Portion Drift — Top Drifting Ingredients
+              </CardTitle>
+              <p className="text-xs text-slate-500">
+                Actual vs theoretical consumption gap. Positive = over-consumption.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <BarChartWidget
+                data={portionDrift as unknown as Record<string, unknown>[]}
+                config={{
+                  xKey: "ingredient",
+                  bars: [{ key: "drift_pct", name: "Drift %", color: "#ef4444" }],
+                }}
+              />
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </>
   );
 }

@@ -115,6 +115,7 @@ from routers.data_status import router as data_status_router
 from routers.whatsapp import router as whatsapp_router
 from routers.feed import router as feed_router
 from routers.telegram import router as telegram_router
+from routers.features import router as features_router
 
 app.include_router(health_router)
 app.include_router(restaurants_router)
@@ -136,6 +137,7 @@ app.include_router(data_status_router)
 app.include_router(whatsapp_router)
 app.include_router(feed_router)
 app.include_router(telegram_router)
+app.include_router(features_router)
 
 
 if __name__ == "__main__":

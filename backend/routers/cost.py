@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from database import get_readonly_db
 from dependencies import date_to_ist_range, get_period_range, get_restaurant_id
-from models import Order, TallyVoucher, TallyLedgerEntry
+from models import AVTDaily, Order, TallyVoucher, TallyLedgerEntry
 from services.pl_engine import compute_pl, _build_waterfall, PURCHASE_VOUCHER_TYPES
 
 logger = logging.getLogger("ytip.cost")
@@ -395,3 +395,46 @@ def ingredient_volatility(
 
     data.sort(key=lambda r: r.volatility_pct, reverse=True)
     return IngredientVolatilityResponse(data=data)
+
+
+# ---------------------------------------------------------------------------
+# 7. Portion Drift — AvT ingredient-level drift
+# ---------------------------------------------------------------------------
+
+@router.get("/portion-drift")
+def portion_drift(
+    rid: int = Depends(get_restaurant_id),
+    period_range: tuple = Depends(get_period_range),
+    db: Session = Depends(get_readonly_db),
+) -> Dict:
+    """Top ingredients by drift percentage from avt_daily."""
+    start_date, end_date = period_range
+    rows = (
+        db.query(
+            AVTDaily.ingredient_name,
+            func.avg(AVTDaily.drift_pct).label("avg_drift_pct"),
+            func.sum(AVTDaily.drift_cost).label("total_drift_cost"),
+            AVTDaily.unit,
+        )
+        .filter(
+            AVTDaily.restaurant_id == rid,
+            AVTDaily.analysis_date >= start_date,
+            AVTDaily.analysis_date <= end_date,
+            AVTDaily.drift_pct.isnot(None),
+        )
+        .group_by(AVTDaily.ingredient_name, AVTDaily.unit)
+        .order_by(func.abs(func.avg(AVTDaily.drift_pct)).desc())
+        .limit(15)
+        .all()
+    )
+    return {
+        "data": [
+            {
+                "ingredient": r.ingredient_name,
+                "drift_pct": round(float(r.avg_drift_pct or 0), 1),
+                "drift_cost": int(r.total_drift_cost or 0),
+                "unit": r.unit or "",
+            }
+            for r in rows
+        ]
+    }

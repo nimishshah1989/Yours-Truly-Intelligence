@@ -330,6 +330,68 @@ async def generate_insight_cards() -> None:
 
 
 # ------------------------------------------------------------------
+# Job: nightly pattern detection (2:30 AM IST)
+# ------------------------------------------------------------------
+
+async def run_nightly_intelligence() -> None:
+    """Daily 2:30 AM IST: run pattern detectors after daily summary."""
+    logger.info("[scheduler] Running nightly pattern detectors")
+
+    db = SessionLocal()
+    try:
+        from compute.pattern_detectors import run_all_detectors
+
+        restaurants = _get_active_restaurants(db)
+        for restaurant in restaurants:
+            try:
+                findings = run_all_detectors(db, restaurant.id)
+                logger.info(
+                    "[scheduler] Pattern detection OK: restaurant=%s findings=%d",
+                    restaurant.id, len(findings),
+                )
+            except Exception as exc:
+                logger.error(
+                    "[scheduler] Pattern detection FAILED: restaurant=%s error=%s",
+                    restaurant.id, exc,
+                )
+    finally:
+        db.close()
+
+
+# ------------------------------------------------------------------
+# Job: weekly Claude analysis (Sunday 3 AM IST)
+# ------------------------------------------------------------------
+
+async def run_weekly_intelligence() -> None:
+    """Sunday 3 AM IST: run weekly Claude analysis."""
+    logger.info("[scheduler] Running weekly Claude analysis")
+
+    db = SessionLocal()
+    try:
+        from intelligence.weekly_analysis import run_weekly_analysis
+
+        restaurants = _get_active_restaurants(db)
+        week_start = date.today() - timedelta(days=7)
+        # Align to Monday
+        week_start = week_start - timedelta(days=week_start.weekday())
+        for restaurant in restaurants:
+            try:
+                result = run_weekly_analysis(db, restaurant.id, week_start)
+                status = "written" if result else "skipped"
+                logger.info(
+                    "[scheduler] Weekly analysis %s: restaurant=%s week=%s",
+                    status, restaurant.id, week_start,
+                )
+            except Exception as exc:
+                logger.error(
+                    "[scheduler] Weekly analysis FAILED: restaurant=%s error=%s",
+                    restaurant.id, exc,
+                )
+    finally:
+        db.close()
+
+
+# ------------------------------------------------------------------
 # Lifecycle
 # ------------------------------------------------------------------
 
@@ -383,6 +445,18 @@ def start_scheduler() -> None:
         generate_insight_cards,
         CronTrigger(hour=2, minute=0, timezone=TIMEZONE),
         id="nightly_insight_cards",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        run_nightly_intelligence,
+        CronTrigger(hour=2, minute=30, timezone=TIMEZONE),
+        id="nightly_intelligence",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        run_weekly_intelligence,
+        CronTrigger(day_of_week="sun", hour=3, minute=0, timezone=TIMEZONE),
+        id="weekly_intelligence",
         replace_existing=True,
     )
 

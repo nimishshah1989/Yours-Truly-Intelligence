@@ -61,3 +61,22 @@ export function useIngredientVolatility() {
     fetcher<IngredientVolatilityResponse>,
   );
 }
+
+interface PortionDriftItem {
+  ingredient: string;
+  drift_pct: number;
+  drift_cost: number;
+  unit: string;
+}
+
+interface PortionDriftResponse {
+  data: PortionDriftItem[];
+}
+
+export function usePortionDrift() {
+  const { periodParams } = usePeriod();
+  return useSWR<PortionDriftResponse>(
+    `/api/cost/portion-drift?${periodParams}`,
+    fetcher<PortionDriftResponse>,
+  );
+}

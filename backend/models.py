@@ -162,6 +162,7 @@ class MenuItem(Base):
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     tags: Mapped[Optional[Dict]] = mapped_column(JSONB)
+    classification: Mapped[str] = mapped_column(String(20), default="prepared")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
@@ -169,6 +170,33 @@ class MenuItem(Base):
 
     __table_args__ = (
         Index("ix_menu_items_restaurant_category", "restaurant_id", "category"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Order Item Consumption (consumed[] from inventory API)
+# ---------------------------------------------------------------------------
+class OrderItemConsumption(Base):
+    """Raw material consumption per order item — from PetPooja consumed[] array."""
+    __tablename__ = "order_item_consumption"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    order_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("orders.id"), nullable=False
+    )
+    order_item_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("order_items.id"), nullable=False
+    )
+    rm_id: Mapped[Optional[str]] = mapped_column(String(50))
+    rm_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    quantity_consumed: Mapped[float] = mapped_column(Float, default=0)
+    unit: Mapped[str] = mapped_column(String(30), default="unit")
+    price_per_unit: Mapped[float] = mapped_column(Float, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_consumption_order_item", "order_item_id"),
+        Index("ix_consumption_rm", "rm_id"),
     )
 
 

@@ -5,11 +5,14 @@ import { useRouter } from "next/navigation";
 import { useFeed } from "@/hooks/use-feed";
 import { useRestaurant } from "@/hooks/use-restaurant";
 import { InsightCard } from "@/components/feed/insight-card";
+import { useMoneyFound } from "@/hooks/use-home";
+import { formatPrice } from "@/lib/utils";
 
 export default function FeedPage() {
   const router = useRouter();
   const { current } = useRestaurant();
   const { cards, isLoading, dismissCard, refresh } = useFeed(30);
+  const { data: moneyFound } = useMoneyFound();
 
   const handleAction = useCallback(
     (url: string) => {
@@ -59,6 +62,39 @@ export default function FeedPage() {
           <div className="text-[11px] text-yt-dark/40">Yesterday&apos;s summary</div>
         </button>
       </div>
+
+      {/* Money Found Banner */}
+      {moneyFound && moneyFound.total_impact_paisa > 0 && (
+        <div className="mb-6 rounded-xl border border-amber-200 bg-gradient-to-r from-amber-50 to-yellow-50 p-4 shadow-sm">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wider text-amber-700">
+                Money Found
+              </p>
+              <p className="mt-1 text-2xl font-bold text-amber-900">
+                {formatPrice(moneyFound.total_impact_paisa)}
+                <span className="text-sm font-normal text-amber-600">/year</span>
+              </p>
+              <p className="mt-0.5 text-xs text-amber-600">
+                {moneyFound.finding_count} finding{moneyFound.finding_count !== 1 ? "s" : ""} need attention
+              </p>
+            </div>
+            <div className="text-3xl">💰</div>
+          </div>
+          {moneyFound.top_findings.length > 0 && (
+            <div className="mt-3 space-y-1.5 border-t border-amber-200 pt-3">
+              {moneyFound.top_findings.map((f, i) => (
+                <div key={i} className="flex items-center justify-between text-xs">
+                  <span className="text-amber-800 line-clamp-1">{f.title}</span>
+                  <span className="ml-2 whitespace-nowrap font-medium text-amber-900">
+                    {formatPrice(f.rupee_impact)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Feed */}
       {isLoading ? (

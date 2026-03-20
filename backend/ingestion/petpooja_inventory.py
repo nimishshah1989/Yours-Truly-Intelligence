@@ -20,7 +20,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from config import settings
-from models import Order, OrderItem, SyncLog
+from models import MenuItem, Order, OrderItem, OrderItemConsumption, SyncLog
 
 logger = logging.getLogger("ytip.ingestion.inventory")
 
@@ -140,6 +140,33 @@ def _compute_item_cogs(consumed: List[Dict]) -> int:
     return round(total * 100)
 
 
+def _classify_item(item_name: str, consumed: List[Dict]) -> str:
+    """Classify menu item based on consumed[] pattern.
+
+    2+ different rawmaterialids = prepared (real recipe)
+    0-1 entries matching item name = retail (packaged goods)
+    """
+    if not consumed:
+        return "retail"
+
+    unique_materials = len(set(
+        str(c.get("rawmaterialid", "")) for c in consumed if c.get("rawmaterialid")
+    ))
+
+    if unique_materials >= 2:
+        return "prepared"
+
+    # Single material — check if it matches item name (packaged)
+    if unique_materials <= 1 and consumed:
+        material_name = str(consumed[0].get("rawmaterialname", "")).lower().strip()
+        if material_name and item_name.lower().strip() in material_name:
+            return "retail"
+        if material_name and material_name in item_name.lower().strip():
+            return "retail"
+
+    return "prepared"
+
+
 def ingest_inventory_cogs(
     restaurant, db: Session, target_date: date
 ) -> Tuple[int, int]:
@@ -205,6 +232,45 @@ def ingest_inventory_cogs(
                 )
                 if db_item:
                     db_item.cost_price = cogs
+
+                    # Also store consumed[] as OrderItemConsumption records
+                    for c in consumed:
+                        rm_id = str(c.get("rawmaterialid", ""))
+                        if not rm_id:
+                            continue
+                        existing_consumption = (
+                            db.query(OrderItemConsumption)
+                            .filter(
+                                OrderItemConsumption.order_id == order.id,
+                                OrderItemConsumption.order_item_id == db_item.id,
+                                OrderItemConsumption.rm_id == rm_id,
+                            )
+                            .first()
+                        )
+                        if not existing_consumption:
+                            db.add(OrderItemConsumption(
+                                order_id=order.id,
+                                order_item_id=db_item.id,
+                                rm_id=rm_id,
+                                rm_name=str(c.get("rawmaterialname", "")),
+                                quantity_consumed=float(c.get("rawmaterialquantity", 0) or 0),
+                                unit=str(c.get("unitname", "")),
+                                price_per_unit=float(c.get("price", 0) or 0),
+                            ))
+
+                    # Classify and update MenuItem
+                    classification = _classify_item(item_name, consumed)
+                    menu_item = (
+                        db.query(MenuItem)
+                        .filter(
+                            MenuItem.restaurant_id == restaurant.id,
+                            MenuItem.name == item_name,
+                        )
+                        .first()
+                    )
+                    if menu_item and menu_item.classification != classification:
+                        menu_item.classification = classification
+
                     items_updated += 1
 
         db.flush()

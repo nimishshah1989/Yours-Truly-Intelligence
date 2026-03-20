@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from database import get_readonly_db
 from dependencies import date_to_ist_range, get_restaurant_id, safe_pct_change
-from models import Customer, DailySummary, Order
+from models import Customer, DailySummary, IntelligenceFinding, Order
 from services.analytics_service import IST, today_ist
 
 logger = logging.getLogger("ytip.home")
@@ -35,6 +35,19 @@ class StatCardResponse(BaseModel):
 class HomeSummaryResponse(BaseModel):
     stats: List[StatCardResponse]
     last_updated: str
+
+
+class MoneyFoundItem(BaseModel):
+    title: str
+    rupee_impact: int
+    category: str
+    severity: str
+
+
+class MoneyFoundResponse(BaseModel):
+    total_impact_paisa: int
+    finding_count: int
+    top_findings: List[MoneyFoundItem]
 
 
 # ---------------------------------------------------------------------------
@@ -134,3 +147,60 @@ def home_summary(
     except Exception as exc:
         logger.error("Home summary failed for restaurant %s: %s", restaurant_id, exc)
         raise HTTPException(status_code=500, detail="Failed to load summary") from exc
+
+
+@router.get("/money-found", response_model=MoneyFoundResponse)
+def money_found(
+    restaurant_id: int = Depends(get_restaurant_id),
+    db: Session = Depends(get_readonly_db),
+):
+    """Sum of unactioned intelligence findings — rupee impact the system has found."""
+    try:
+        total = (
+            db.query(func.coalesce(func.sum(IntelligenceFinding.rupee_impact), 0))
+            .filter(
+                IntelligenceFinding.restaurant_id == restaurant_id,
+                IntelligenceFinding.is_actioned.is_(False),
+            )
+            .scalar()
+        ) or 0
+
+        count = (
+            db.query(func.count(IntelligenceFinding.id))
+            .filter(
+                IntelligenceFinding.restaurant_id == restaurant_id,
+                IntelligenceFinding.is_actioned.is_(False),
+            )
+            .scalar()
+        ) or 0
+
+        top = (
+            db.query(IntelligenceFinding)
+            .filter(
+                IntelligenceFinding.restaurant_id == restaurant_id,
+                IntelligenceFinding.is_actioned.is_(False),
+                IntelligenceFinding.rupee_impact.isnot(None),
+                IntelligenceFinding.rupee_impact > 0,
+            )
+            .order_by(IntelligenceFinding.rupee_impact.desc())
+            .limit(3)
+            .all()
+        )
+
+        return MoneyFoundResponse(
+            total_impact_paisa=int(total),
+            finding_count=int(count),
+            top_findings=[
+                MoneyFoundItem(
+                    title=f.title,
+                    rupee_impact=f.rupee_impact or 0,
+                    category=f.category,
+                    severity=f.severity,
+                )
+                for f in top
+            ],
+        )
+
+    except Exception as exc:
+        logger.error("Money found query failed: %s", exc)
+        raise HTTPException(status_code=500, detail="Failed to load findings") from exc
