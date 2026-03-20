@@ -3,6 +3,8 @@
 from datetime import date, datetime
 from typing import Dict, List, Optional
 
+from uuid import UUID as PyUUID
+
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -12,12 +14,13 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database import Base
@@ -717,4 +720,182 @@ class ReconciliationCheck(Base):
         ),
         Index("ix_reconciliation_restaurant_date", "restaurant_id", "check_date"),
         Index("ix_reconciliation_restaurant_status", "restaurant_id", "status"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Intelligence Layer (schema_v3)
+# ---------------------------------------------------------------------------
+class IntelligenceFinding(Base):
+    """Pattern detector findings — written nightly by compute/pattern_detectors.py"""
+    __tablename__ = "intelligence_findings"
+
+    id: Mapped[PyUUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    restaurant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("restaurants.id"), nullable=False
+    )
+    finding_date: Mapped[date] = mapped_column(Date, nullable=False)
+    category: Mapped[str] = mapped_column(String(50), nullable=False)
+    severity: Mapped[str] = mapped_column(String(20), nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    detail: Mapped[Optional[Dict]] = mapped_column(JSONB, nullable=True)
+    related_items = mapped_column(ARRAY(Text), nullable=True)
+    rupee_impact: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    is_actioned: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    restaurant = relationship("Restaurant", backref="intelligence_findings")
+
+
+class InsightsJournal(Base):
+    """Claude weekly batch analysis observations"""
+    __tablename__ = "insights_journal"
+
+    id: Mapped[PyUUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    restaurant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("restaurants.id"), nullable=False
+    )
+    week_start: Mapped[date] = mapped_column(Date, nullable=False)
+    observation_text: Mapped[str] = mapped_column(Text, nullable=False)
+    connected_finding_ids = mapped_column(ARRAY(UUID(as_uuid=True)), nullable=True)
+    suggested_action: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    confidence: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    owner_relevance_score: Mapped[int] = mapped_column(Integer, default=5)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    restaurant = relationship("Restaurant", backref="insights_journal")
+
+
+class ConversationMemory(Base):
+    """Every owner interaction logged for context accumulation"""
+    __tablename__ = "conversation_memory"
+
+    id: Mapped[PyUUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    restaurant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("restaurants.id"), nullable=False
+    )
+    channel: Mapped[str] = mapped_column(String(20), nullable=False)
+    query_text: Mapped[str] = mapped_column(Text, nullable=False)
+    response_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    query_category: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    owner_engaged: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    restaurant = relationship("Restaurant", backref="conversation_memories")
+
+
+class AVTDaily(Base):
+    """Actual vs Theoretical food cost per ingredient per day"""
+    __tablename__ = "avt_daily"
+
+    id: Mapped[PyUUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    restaurant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("restaurants.id"), nullable=False
+    )
+    analysis_date: Mapped[date] = mapped_column(Date, nullable=False)
+    ingredient_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    ingredient_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    unit: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    theoretical_qty = mapped_column(Numeric(12, 4), nullable=True)
+    theoretical_cost = mapped_column(Numeric(12, 2), nullable=True)
+    actual_qty = mapped_column(Numeric(12, 4), nullable=True)
+    actual_cost = mapped_column(Numeric(12, 2), nullable=True)
+    drift_qty = mapped_column(Numeric(12, 4), nullable=True)
+    drift_cost = mapped_column(Numeric(12, 2), nullable=True)
+    drift_pct = mapped_column(Numeric(8, 2), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "restaurant_id", "analysis_date", "ingredient_id", name="avt_daily_unique"
+        ),
+    )
+
+    restaurant = relationship("Restaurant", backref="avt_daily")
+
+
+class VendorPriceTracking(Base):
+    """Vendor ingredient price tracking over time"""
+    __tablename__ = "vendor_price_tracking"
+
+    id: Mapped[PyUUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    restaurant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("restaurants.id"), nullable=False
+    )
+    tracking_date: Mapped[date] = mapped_column(Date, nullable=False)
+    ingredient_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    vendor_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    current_price: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    avg_30d: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    avg_60d: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    avg_90d: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    price_trend: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    deviation_pct = mapped_column(Numeric(8, 2), nullable=True)
+    risk_level: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "restaurant_id", "tracking_date", "ingredient_name", "vendor_name",
+            name="vendor_tracking_unique",
+        ),
+    )
+
+    restaurant = relationship("Restaurant", backref="vendor_price_tracking")
+
+
+class MenuAnalysis(Base):
+    """Menu Doctor quadrant analysis — recomputed weekly"""
+    __tablename__ = "menu_analysis"
+
+    id: Mapped[PyUUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    restaurant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("restaurants.id"), nullable=False
+    )
+    analysis_date: Mapped[date] = mapped_column(Date, nullable=False)
+    item_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    item_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    category_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    classification: Mapped[str] = mapped_column(String(20), default="prepared")
+    qty_sold: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    total_revenue: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    avg_selling_price: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    avg_cogs_per_serving: Mapped[Optional[int]] = mapped_column(
+        BigInteger, nullable=True
+    )
+    margin_pct = mapped_column(Numeric(8, 2), nullable=True)
+    popularity_rank: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    quadrant: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    trend: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    period_weeks: Mapped[int] = mapped_column(Integer, default=4)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "restaurant_id", "analysis_date", "item_id", name="menu_analysis_unique"
+        ),
     )

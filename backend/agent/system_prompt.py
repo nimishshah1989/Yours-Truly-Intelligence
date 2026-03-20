@@ -17,6 +17,85 @@ from zoneinfo import ZoneInfo
 logger = logging.getLogger("ytip.agent.prompt")
 
 
+def _get_intelligence_context(restaurant_id: int) -> str:
+    """Fetch recent intelligence findings + conversation memory for prompt injection."""
+    try:
+        from database import SessionReadOnly
+        from models import ConversationMemory, IntelligenceFinding, InsightsJournal
+
+        db = SessionReadOnly()
+        try:
+            findings = (
+                db.query(IntelligenceFinding)
+                .filter(IntelligenceFinding.restaurant_id == restaurant_id)
+                .order_by(
+                    IntelligenceFinding.finding_date.desc(),
+                    IntelligenceFinding.severity.desc(),
+                )
+                .limit(10)
+                .all()
+            )
+
+            journal = (
+                db.query(InsightsJournal)
+                .filter(InsightsJournal.restaurant_id == restaurant_id)
+                .order_by(InsightsJournal.created_at.desc())
+                .limit(3)
+                .all()
+            )
+
+            memories = (
+                db.query(ConversationMemory)
+                .filter(ConversationMemory.restaurant_id == restaurant_id)
+                .order_by(ConversationMemory.created_at.desc())
+                .limit(10)
+                .all()
+            )
+
+            parts: List[str] = []
+
+            if findings:
+                parts.append(
+                    "RECENT INTELLIGENCE FINDINGS (from automated pattern detection):"
+                )
+                for f in findings:
+                    impact = ""
+                    if f.rupee_impact:
+                        impact = f" [Est. annual impact: ₹{f.rupee_impact // 100:,}]"
+                    parts.append(
+                        f"  [{f.severity.upper()}] {f.finding_date}: {f.title}{impact}"
+                    )
+
+            if journal:
+                parts.append(
+                    "\nWEEKLY ANALYSIS OBSERVATIONS (from Claude batch analysis):"
+                )
+                for j in journal:
+                    parts.append(
+                        f"  Week of {j.week_start}: {j.observation_text[:300]}"
+                    )
+                    if j.suggested_action:
+                        parts.append(f"    → Suggested: {j.suggested_action[:200]}")
+
+            if memories:
+                parts.append(
+                    "\nRECENT OWNER INTERACTIONS (what the owner has been asking about):"
+                )
+                for m in memories:
+                    cat = f" [{m.query_category}]" if m.query_category else ""
+                    parts.append(
+                        f"  {m.created_at.strftime('%b %d')}{cat}: {m.query_text[:150]}"
+                    )
+
+            if parts:
+                return "\n".join(parts)
+            return ""
+        finally:
+            db.close()
+    except Exception:
+        return ""
+
+
 def build_system_prompt(restaurant_name: str, restaurant_id: int) -> str:
     """Build a system prompt with complete schema context for the Claude agent."""
 
@@ -27,7 +106,7 @@ def build_system_prompt(restaurant_name: str, restaurant_id: int) -> str:
     # Load learned owner rules from DB
     owner_rules_section = _load_owner_rules(restaurant_id)
 
-    return f"""You are the intelligence engine for **{restaurant_name}**, a premium café \
+    prompt = f"""You are the intelligence engine for **{restaurant_name}**, a premium café \
 in Kolkata. You help the owner (Piyush) run the business by querying data, \
 spotting trends, and giving direct, actionable answers.
 
@@ -238,6 +317,21 @@ to save it. This ensures the preference is remembered for all future conversatio
 - When showing item rankings, always exclude noise (addons, water, packaging) \
 unless the owner explicitly asks for them.
 """
+
+    intelligence_context = _get_intelligence_context(restaurant_id)
+    if intelligence_context:
+        return prompt + f"""
+
+--- ACCUMULATED INTELLIGENCE (use this to give more specific, contextual answers) ---
+
+{intelligence_context}
+
+When answering, reference these findings where relevant. If the owner asks about
+something you have intelligence on, lead with the specific finding rather than
+querying from scratch. Connect dots across findings when possible.
+"""
+
+    return prompt
 
 
 def _load_owner_rules(restaurant_id: int) -> str:

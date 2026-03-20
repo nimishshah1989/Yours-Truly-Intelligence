@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db, get_readonly_db
 from dependencies import get_restaurant_id
-from models import ChatMessage, ChatSession, Restaurant
+from models import ChatMessage, ChatSession, ConversationMemory, Restaurant
 
 logger = logging.getLogger("ytip.chat")
 router = APIRouter(prefix="/api/chat", tags=["AI Chat"])
@@ -79,6 +79,24 @@ def _to_message_response(msg: ChatMessage) -> MessageResponse:
         widgets=msg.widgets if msg.widgets else None,
         created_at=_ts(msg.created_at),
     )
+
+
+def _categorize_query(query: str) -> str:
+    """Simple keyword-based query categorization."""
+    q = query.lower()
+    if any(w in q for w in ["food cost", "cogs", "ingredient", "portion", "recipe", "consumption"]):
+        return "food_cost"
+    if any(w in q for w in ["menu", "item", "dish", "star", "dog", "margin"]):
+        return "menu"
+    if any(w in q for w in ["zomato", "swiggy", "channel", "delivery", "commission", "aggregator"]):
+        return "channel"
+    if any(w in q for w in ["vendor", "purchase", "supplier", "price"]):
+        return "vendor"
+    if any(w in q for w in ["staff", "labor", "employee", "shift"]):
+        return "staffing"
+    if any(w in q for w in ["revenue", "sales", "order", "ticket"]):
+        return "revenue"
+    return "general"
 
 
 def _get_session_or_404(db: Session, session_id: int, restaurant_id: int) -> ChatSession:
@@ -237,6 +255,21 @@ def send_message(
     )
     db.add(assistant_msg)
     db.flush()
+
+    # Log to conversation memory
+    try:
+        memory = ConversationMemory(
+            restaurant_id=restaurant_id,
+            channel="web",
+            query_text=body.content,
+            response_summary=text_response[:500],
+            query_category=_categorize_query(body.content),
+            owner_engaged=False,
+        )
+        db.add(memory)
+        db.flush()
+    except Exception:
+        pass  # never break chat for memory logging failure
 
     # Auto-title: set session title to first user message (truncated)
     if not prior_messages and body.content:
