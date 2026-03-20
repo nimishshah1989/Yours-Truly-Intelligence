@@ -77,12 +77,12 @@ DO NOT just restate numbers. Every finding must answer: "So what? What should I 
 {json.dumps(data_pack, indent=2, default=str)}
 
 === RULES ===
-- All monetary amounts are in PAISA (divide by 100 for rupees). Display as ₹X,XXX format.
+- All monetary amounts are already in RUPEES (INR). Display as ₹X,XXX format.
 - Focus on cross-signal insights (e.g., if an item is declining AND has low COGS, that's a pricing opportunity)
 - Categories must be one of: revenue, cost, menu, operations
 - Severity must be one of: critical, alert, watch, info
 - Each finding needs a clear title (max 80 chars), a narrative explanation, and a specific recommended action
-- Rupee impact should be a realistic MONTHLY estimate in paisa. If you can't estimate, use null.
+- Rupee impact should be a realistic MONTHLY estimate in RUPEES (not paisa). If you can't estimate, use null.
 - Don't generate findings about things that are going well unless there's an action to capitalize on it
 - Keep narratives to 2 sentences max. Keep actions to 1 sentence max.
 
@@ -120,7 +120,7 @@ Return ONLY a JSON array (no markdown, no explanation). Each object:
                     "source": "claude_deep_analysis",
                 },
                 related_items=ins.get("related_items"),
-                rupee_impact=ins.get("rupee_impact"),
+                rupee_impact=int(ins["rupee_impact"] * 100) if ins.get("rupee_impact") else None,
             ))
 
         logger.info("Generated %d deep insights for %s", len(findings), as_of)
@@ -151,7 +151,7 @@ def _gather_data_signals(
 
         daily_data = [
             {"date": str(r[0]), "orders": int(r[1]),
-             "revenue": int(r[2]), "avg_ticket": int(r[3])}
+             "revenue_rupees": int(r[2]) // 100, "avg_ticket_rupees": int(r[3]) // 100}
             for r in daily_rev
         ]
 
@@ -169,7 +169,7 @@ def _gather_data_signals(
 
         items_data = [
             {"name": r[0], "qty_sold": int(r[1]),
-             "revenue": int(r[2]), "avg_cost": int(r[3])}
+             "revenue_rupees": int(r[2]) // 100, "avg_cost_rupees": round(int(r[3]) / 100, 2)}
             for r in top_items
         ]
 
@@ -218,7 +218,7 @@ def _gather_data_signals(
 
         dow_names = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
         dow_data = [
-            {"day": dow_names[int(r[0])], "orders": int(r[1]), "revenue": int(r[2])}
+            {"day": dow_names[int(r[0])], "orders": int(r[1]), "revenue_rupees": int(r[2]) // 100}
             for r in dow_perf
         ]
 
@@ -236,7 +236,8 @@ def _gather_data_signals(
         """), {"rid": restaurant_id, "start": as_of - timedelta(days=6), "end": as_of}).fetchall()
 
         cogs = [
-            {"date": str(r[0]), "cogs": int(r[1]), "item_revenue": int(r[2]),
+            {"date": str(r[0]), "cogs_rupees": int(r[1]) // 100,
+             "item_revenue_rupees": int(r[2]) // 100,
              "cogs_pct": round(int(r[1]) / max(int(r[2]), 1) * 100, 1)}
             for r in cogs_data
         ]
@@ -252,7 +253,7 @@ def _gather_data_signals(
         """), {"rid": restaurant_id, "start": as_of - timedelta(days=6), "end": as_of}).fetchall()
 
         channels = [
-            {"channel": r[0], "orders": int(r[1]), "revenue": int(r[2])}
+            {"channel": r[0], "orders": int(r[1]), "revenue_rupees": int(r[2]) // 100}
             for r in channel_mix
         ]
 
@@ -267,7 +268,7 @@ def _gather_data_signals(
         """), {"rid": restaurant_id, "dt": as_of}).fetchall()
 
         hourly_data = [
-            {"hour": int(r[0]), "orders": int(r[1]), "revenue": int(r[2])}
+            {"hour": int(r[0]), "orders": int(r[1]), "revenue_rupees": int(r[2]) // 100}
             for r in hourly
         ]
 
