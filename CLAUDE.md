@@ -266,3 +266,21 @@ WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_VERIFY_TOKEN, OWNER_WHATSAPP, OPENAI_API_KEY
 New (add as you build each module):
 GOOGLE_PLACES_API_KEY, SERPER_API_KEY, IMD_API_KEY,
 APMC_API_ENDPOINT, DRIK_PANCHANG_API_KEY
+
+---
+
+## Data Freshness — Critical
+
+PetPooja API delivers previous day's data with T-1 lag.
+Daily pipeline runs at 2am IST to fetch yesterday's close.
+Agent analysis runs AFTER this pipeline completes.
+Agents must never assume intraday data is available.
+
+Pipeline sequence (2am daily):
+1. Fetch yesterday's PetPooja orders
+2. Fetch yesterday's inventory/COGS
+3. Fetch stock snapshot
+4. Run daily_summary computation
+5. Run Ravi, Maya, Arjun, Sara
+6. Quality Council vets findings
+7. Send any immediate WhatsApp nudges
