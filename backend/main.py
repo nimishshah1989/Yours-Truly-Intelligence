@@ -7,8 +7,8 @@ from collections.abc import AsyncGenerator
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from config import settings
-from database import init_db
+from core.config import settings
+from core.database import init_db
 
 # Configure logging
 logging.basicConfig(

@@ -1,54 +1,64 @@
 # CLAUDE.md — YoursTruly Intelligence Platform (YTIP)
 
-## Read This First — What Already Exists
+> Read this every session. Read the docs/ files on-demand for the module you're building.
 
-This project has a **substantial existing codebase**. Before writing ANY code, understand what is built:
+---
 
-- **Backend:** FastAPI with SQLAlchemy ORM, 20 routers, 15 services, Claude agent with tool-use (~15,000 lines Python)
-- **Frontend:** Next.js 14 App Router, 15 pages, 12 chart widget types, SWR hooks, shadcn/ui (~5,000 lines TS)
-- **Database:** PostgreSQL schema with 43+ tables, schema_v2 migrations, RLS, indexes (1,300 lines SQL)
-- **ETL:** PetPooja ingestion for orders (T-1 corrected), inventory orders (consumed[] → COGS), stock, menu
-- **Agent:** Claude multi-turn tool-use loop with `run_sql` and `create_widget` tools
-- **Infra:** Docker, EC2 deploy script, multi-tenant via restaurant_id
+## What This Codebase Is
 
-**DO NOT rewrite existing code. Extend it. All changes must be additive.**
+A restaurant intelligence engine acting as Chief of Staff for YoursTruly Coffee Roaster. NOT a dashboard. Every insight has a specific action and a ₹ impact. The system gets smarter every day through accumulated findings and conversation memory.
+
+**The new direction (as of March 2026):** We are layering a 7-agent intelligence system on top of the existing analytics platform. The existing dashboards, ETL, and agent chat stay intact. The intelligence layer is additive — it lives in `backend/intelligence/`.
 
 ---
 
 ## Project Identity
 
-**Project:** YoursTruly Intelligence Platform
 **Client:** YoursTruly Coffee Roaster, Kolkata
 **Owner:** Piyush Kankaria
 **Builder:** Nimish Shah (non-technical founder — Claude Code is the engineering team)
 **PetPooja Outlet ID:** 407585 | **restID:** 34cn0ieb1f
 
-**What this is:** A restaurant intelligence engine acting as Chief of Staff. NOT a dashboard. Every screen shows rupee impact. Every insight has a specific action. The system gets smarter every day through accumulated findings and conversation memory.
+---
+
+## What Already Exists — Do Not Rebuild Any of This
+
+- **Backend:** FastAPI + SQLAlchemy ORM, 20 routers, 15 services, Claude agent (~15,000 lines Python)
+- **Frontend:** Next.js 14 App Router, 15 pages, 12 chart widget types, SWR, shadcn/ui (~5,000 lines TS)
+- **Database:** PostgreSQL, 43+ tables, schema.sql + schema_v2.sql
+- **ETL:** PetPooja ingestion — orders (T-1 corrected), inventory (consumed[] → COGS), stock, menu
+- **Agent:** Claude multi-turn tool-use with run_sql + create_widget
+- **Infra:** Docker, EC2 port 8002, deploy script, multi-tenant via restaurant_id
+
+**Rule: All changes are additive. Never rewrite existing files. Extend or add alongside.**
 
 ---
 
-## Stack — Already In Place (DO NOT CHANGE)
+## Stack — Locked, Do Not Change
 
-| Layer | Technology | Notes |
-|---|---|---|
-| Backend | FastAPI (Python 3.11+) + SQLAlchemy ORM | `models.py` is single source of truth |
-| Frontend | Next.js 14 App Router + Tailwind + shadcn/ui | Light theme, Recharts, SWR |
-| Database | RDS PostgreSQL (AWS ap-south-1) | `schema.sql` + `schema_v2.sql` |
-| AI | Claude agent (`backend/agent/`) | `run_sql` + `create_widget`, multi-turn |
-| Hosting | AWS EC2 Mumbai port 8002 + Vercel | Docker via docker-compose.yml |
+| Layer | Technology |
+|-------|-----------|
+| Backend | FastAPI (Python 3.11+) + SQLAlchemy ORM |
+| Frontend | Next.js 14 App Router + Tailwind + shadcn/ui (light theme) |
+| Database | RDS PostgreSQL (AWS ap-south-1) |
+| AI | Claude claude-sonnet-4-6 for all agent calls |
+| Hosting | AWS EC2 Mumbai — port 8002 (never 8000 — conflicts with JIP) |
 
 **Hard rules:**
-- Never switch from SQLAlchemy to raw SQL / asyncpg. The entire backend uses SQLAlchemy.
-- Never switch frontend to dark theme. Existing design is light.
-- Never replace existing routers/services. Extend or add new ones alongside.
-- All amounts = **BigInteger in paisa (INR × 100)**. Divide by 100 for display.
-- Port 8002 on host. Never 8000 (conflicts with JIP).
+- Never switch from SQLAlchemy to raw SQL
+- Never dark theme
+- Never replace existing routers/services — extend or add new ones
+- All monetary amounts = BigInteger paisa (INR x 100). Divide by 100 for display.
+- Port 8002 always. Never 8000.
+- Never commit .env to git.
 
 ---
 
-## Data Sources — Confirmed Credentials
+## PetPooja API — Critical Behaviour (Read Every Session)
 
-### PetPooja Orders API (Generic — NO consumed[])
+### Endpoints
+
+**Orders API (Generic — NO consumed[])**
 ```
 Endpoint: https://api.petpooja.com/V1/thirdparty/generic_get_orders/
 Config vars: petpooja_app_key, petpooja_app_secret, petpooja_access_token
@@ -58,232 +68,201 @@ T-1 LAG: Pass D+1 to get day D data
 Code: backend/ingestion/petpooja_orders.py (BUILT — all 6 bugs fixed)
 ```
 
-### PetPooja Inventory Orders API (HAS consumed[] — THE GOLDMINE)
+**Inventory Orders API (HAS consumed[] — THE GOLDMINE)**
 ```
 Endpoint: https://api.petpooja.com/V1/thirdparty/get_orders_api/
 Config vars: petpooja_inv_app_key, petpooja_inv_app_secret, petpooja_inv_access_token
 menuSharingCode: 34cn0ieb1f
-consumed[].price is PER-UNIT. Total = rawmaterialquantity × price
+consumed[].price is PER-UNIT. Total = rawmaterialquantity x price
 Code: backend/ingestion/petpooja_inventory.py (BUILT — enriches OrderItem.cost_price)
 ```
 
-### PetPooja Stock API
+**Stock API**
 ```
 Endpoint: https://api.petpooja.com/V1/thirdparty/get_stock_api/
 Param: "date" NOT "order_date"
 Code: backend/ingestion/petpooja_stock.py (BUILT)
 ```
 
-### PetPooja Purchase API
+**Purchase API**
 ```
 Endpoint: https://api.petpooja.com/V1/thirdparty/get_purchase/
 Date format: DD-MM-YYYY, max 1-month range, requires BOTH cookies
-Code: NOT YET BUILT — needs new ingestion script
+Code: NOT YET BUILT
 ```
 
-### PetPooja Menu API
+**Menu API**
 ```
 Endpoint: https://onlineapipp.petpooja.com/thirdparty_fetch_dinein_menu
-HYPHENATED headers: app-key, app-secret, access-token (NOT underscores)
+Headers: HYPHENATED — app-key, app-secret, access-token (NOT underscores)
 Code: backend/etl/etl_menu.py (BUILT)
 ```
 
-### Tally
-```
-XML ingestion: backend/etl/etl_tally.py + tally_parser.py (BUILT)
-Upload endpoint: backend/routers/tally.py (BUILT)
-```
+### API Quirks — Memorise These
+1. T-1 lag: Pass D+1 to get day D data
+2. Response key is order_json not orders
+3. consumed[].price is PER-UNIT — _compute_item_cogs() handles this correctly
+4. Purchase API: DD-MM-YYYY format, max 1-month range, needs both cookies
+5. All inventory APIs paginate at 50 — existing code handles via refId loop
+6. Menu API uses hyphenated headers — app-key not app_key
 
----
+### The consumed[] Array
+consumed[] = recipe BOM (theoretical consumption), NOT actual kitchen usage.
+Comparing theoretical vs actual stock movement = portion drift = money leaked.
 
-## Critical API Behaviour (Read Every Session)
-
-1. **T-1 Data Lag:** Pass D+1 to get day D. Backfill loops account for this.
-2. **Response key = `order_json`**, not `orders`.
-3. **consumed[].price is PER-UNIT.** Code in `_compute_item_cogs()` handles this correctly.
-4. **Purchase/Sales APIs use DD-MM-YYYY**, max 1-month range, need both cookies.
-5. **All inventory APIs paginate at 50.** Existing code handles via refId loop.
-6. **Menu API uses hyphenated headers** (`app-key` not `app_key`).
-7. **Amounts in DB = BigInteger paisa.** Divide by 100 for display.
-
----
-
-## The consumed[] Array — Why It Matters
-
-From `get_orders_api/` (inventory credentials), each OrderItem includes:
-```json
-"consumed": [
-  {"rawmaterialid": "31944727", "rawmaterialname": "Dalia Bread", "rawmaterialquantity": 2, "unitname": "pcs", "price": "0.283401"},
-  {"rawmaterialid": "31518384", "rawmaterialname": "Dalda Ghee", "rawmaterialquantity": 10, "unitname": "ML", "price": "0.006135"}
-]
-```
-
-**consumed[] = recipe BOM (THEORETICAL consumption), NOT actual kitchen usage.**
-Comparing theoretical (consumed[]) vs actual (stock movement) = portion drift = money leaked.
-
----
-
-## Item Classification System — CRITICAL
-
-At ingestion time, classify every item based on consumed[]:
-
+### Item Classification — Critical
 | consumed[] pattern | Classification | In food cost metrics? |
 |---|---|---|
-| 2+ different rawmaterialids | `prepared` | YES |
-| 0-1 entries matching item name | `retail` | NO — revenue only |
-| Addon entries | `addon` | COGS attributed to parent |
+| 2+ different rawmaterialids | prepared | YES |
+| 0-1 entries matching item name | retail | NO — revenue only |
+| Addon entries | addon | COGS attributed to parent |
 
-**Without this, mineral water / packaged goods distort every food metric.**
-
-Implementation: Add `classification VARCHAR(20) DEFAULT 'prepared'` to menu_items or a lookup table. Set during inventory orders ingestion. All compute modules and frontend pages filter by `classification = 'prepared'` for food metrics.
+Without this, mineral water and packaged goods distort every food metric.
+All food metrics filter by classification = 'prepared'.
 
 ---
 
-## What's Built vs What Must Be Added
+## Folder Structure — New Intelligence Layer
 
-### ✅ BUILT (Do Not Rebuild)
-- Full orders ETL with all 6 bug fixes
-- Inventory orders ingestion with consumed[] → cost_price
-- Stock ingestion, menu ETL, Tally parser
-- Daily summary computation
-- 6 analytics modules (revenue, menu, cost, leakage, customers, operations)
-- Claude agent with run_sql + create_widget
-- 15 frontend pages, 12 widget types, chat interface
-- WhatsApp + Telegram webhooks, alert rules, digest endpoints, feed
-- Multi-tenant architecture
-
-### 🔴 MUST ADD (Sprint Priority for Demo)
-
-**1. Real Data Pipeline**
-- Set all PetPooja env vars in .env
-- Run `backfill.py 90` for order history
-- Run inventory COGS enrichment for 90 days
-- Run stock snapshot for today
-- Build `ingestion/petpooja_purchases.py` for purchase data
-- Run daily_summary computation for backfilled period
-- CRITICAL TEST: `SELECT COUNT(*) FROM order_item_consumption;` must be > 0
-
-**2. Item Classification**
-- Add classification column to model + schema
-- Logic in inventory ingestion: count distinct rawmaterialids per item
-- Filter all food metrics by classification = 'prepared'
-
-**3. Intelligence Tables (schema_v3.sql)**
-```sql
-CREATE TABLE IF NOT EXISTS intelligence_findings (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    restaurant_id INTEGER NOT NULL REFERENCES restaurants(id),
-    finding_date DATE NOT NULL,
-    category VARCHAR(50) NOT NULL,
-    severity VARCHAR(20) NOT NULL,
-    title TEXT NOT NULL,
-    detail JSONB,
-    related_items TEXT[],
-    rupee_impact BIGINT,
-    is_actioned BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS insights_journal (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    restaurant_id INTEGER NOT NULL REFERENCES restaurants(id),
-    week_start DATE NOT NULL,
-    observation_text TEXT NOT NULL,
-    connected_finding_ids UUID[],
-    suggested_action TEXT,
-    confidence VARCHAR(20),
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS conversation_memory (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    restaurant_id INTEGER NOT NULL REFERENCES restaurants(id),
-    channel VARCHAR(20) NOT NULL,
-    query_text TEXT NOT NULL,
-    response_summary TEXT,
-    query_category VARCHAR(50),
-    owner_engaged BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
+```
+backend/
+├── core/                    # config, database, dependencies, models
+├── etl/                     # DO NOT TOUCH
+├── ingestion/               # DO NOT TOUCH
+├── intelligence/            # NEW — entire agent system
+│   ├── agents/              # ravi, maya, arjun, priya, kiran, chef, sara
+│   ├── quality_council/     # 3-stage vetting gate
+│   ├── menu_graph/          # Semantic menu understanding layer
+│   ├── customer_resolution/ # Customer deduplication
+│   ├── knowledge_base/      # Research papers, articles (pgvector)
+│   └── synthesis/           # Message formatter, WhatsApp voice
+├── routers/                 # Keep existing. Add new ones alongside.
+├── services/                # Keep whatsapp_service.py, voice_service.py
+├── scheduler/               # NEW — agent trigger schedules
+└── main.py
 ```
 
-**4. Pattern Detectors (`compute/pattern_detectors.py`)**
-Nightly Python jobs writing to intelligence_findings:
-- food_cost_trend (3+ weeks rising)
-- portion_drift (theoretical vs actual gap > 15%)
-- vendor_price_spike (> 10% above 90-day avg)
-- menu_decline (top item volume drop > 20% over 4 weeks)
-- revenue_anomaly (daily rev > 20% below DOW avg)
+---
 
-**5. AvT Computation (`compute/avt.py`)**
-- Theoretical = SUM(order_item_consumption.quantity_consumed) per ingredient per day
-- Actual = opening stock + purchases - closing stock
-- Drift = Actual - Theoretical
+## The 7 Agents
 
-**6. Weekly Claude Analysis (`intelligence/weekly_analysis.py`)**
-Sunday 3 AM: Assemble week's findings → Claude batch call → insights_journal
+| Agent | Domain | Runs |
+|-------|--------|------|
+| Ravi | Revenue & Orders anomaly detection | Every 4 hours |
+| Maya | Menu & Margin — CM, pricing, review sentiment | Daily post-close |
+| Arjun | Stock & Waste — prep recommendations, supplier spikes | Morning + evening |
+| Priya | Cultural & Calendar — 14-day forward intelligence | Daily + weekly |
+| Kiran | Competition & Market — new openings, ratings, trends | Weekly |
+| Chef | Recipe & Innovation — new dishes with projected margin | Weekly |
+| Sara | Customer Intelligence — RFM, retention, lapse | Weekly |
 
-**7. Conversation Memory in Chat**
-Modify `routers/chat.py`: log every query/response to conversation_memory.
-Modify `agent/system_prompt.py`: inject recent memory + findings into context.
+Quality Council vets every finding through 3 stages before owner sees anything:
+1. Significance check (min 3 data points, statistical threshold)
+2. Cross-agent corroboration (at least 1 other agent pointing same direction)
+3. Actionability + identity filter (specific action, deadline, no conflict with non-negotiables)
 
-**8. Frontend Additions**
-- "Money Found" banner on home (SUM of intelligence_findings.rupee_impact)
-- Channel economics waterfall (existing waterfall widget)
-- Portion drift visualization on cost page
-- Filter menu engineering by classification = 'prepared'
-- Wire insights/feed page to intelligence_findings + insights_journal
+Nothing bypasses Quality Council. Ever.
+
+---
+
+## Critical Rules — Intelligence Layer
+
+1. Agents never query raw PetPooja tables — always through Menu Intelligence Layer
+2. Agents never write to DB — they return Finding objects, scheduler writes them
+3. No restaurant-specific hardcoding — everything from restaurant_profiles table
+4. All monetary values = Decimal never float — use NUMERIC(15,2) in Postgres
+5. New DB tables go in schema_v4.sql — never modify existing schema files
+6. New SQLAlchemy models go in backend/intelligence/models.py not backend/core/models.py
+7. WhatsApp messages only after Quality Council passes
+8. Agents fail silently — try/except everything, return [] on failure, log the error
+
+---
+
+## What NOT to Do
+
+- Do not modify anything in backend/etl/ or backend/ingestion/
+- Do not change backend/core/models.py for intelligence concepts
+- Do not send WhatsApp messages without Quality Council
+- Do not hardcode restaurant names or IDs in agent logic
+- Do not create new DB tables in existing schema files
+- Do not use float for any monetary calculation
+- Do not surface agent names to the restaurant owner
+- Do not send a finding that has no specific action and no deadline
+
+---
+
+## Read These Docs For These Tasks
+
+| Task | Read |
+|------|------|
+| Building any agent | docs/AGENTS.md |
+| Building WhatsApp onboarding | docs/ONBOARDING_FLOW.md |
+| Building Priya / cultural calendar | docs/CULTURAL_MODEL.md |
+| Schema or data model work | docs/ARCHITECTURE.md |
+| Feature scope decisions | docs/PRD.md |
+| Quality council logic | docs/AGENTS.md Quality Council section |
+
+---
+
+## Current Build State
+
+Phase 1 (analytics platform) — COMPLETE
+All 6 dashboard modules, agent chat, WhatsApp webhook, multi-tenancy.
+
+Phase 2 (intelligence layer) — IN PROGRESS
+Build in this order:
+1. schema_v4.sql — new intelligence tables
+2. backend/intelligence/menu_graph/ — semantic menu understanding
+3. backend/intelligence/agents/base_agent.py — base class
+4. Ravi, Maya, Arjun, Sara on live PetPooja data
+5. Quality Council
+6. WhatsApp onboarding (see docs/ONBOARDING_FLOW.md)
+7. Priya, Kiran, Chef
+8. External data feeds
+
+Still needed from Phase 1 before Phase 2:
+- ingestion/petpooja_purchases.py — purchase data
+- Item classification column on menu_items
+- AvT computation (compute/avt_daily.py)
 
 ---
 
 ## Adaptive Feature Display
 
-Features auto-hide when data doesn't exist. NOT a toggle — automatic.
-
 | Condition | Result |
 |---|---|
-| Zero Zomato/Swiggy orders in 30 days | Channel economics section hidden |
-| No Tally data | P&L shows POS-only, no expense breakdown |
+| Zero Zomato/Swiggy orders in 30 days | Channel economics hidden |
+| No Tally data | P&L shows POS-only |
 | No purchase data | Vendor Price Watch hidden |
-| consumed[] empty for all items | Portion Drift unavailable — prompt to configure recipes |
-| No stock data | AvT shows theoretical only |
+| consumed[] empty | Portion Drift unavailable |
+| No stock data | AvT theoretical only |
 
-Frontend checks via `GET /api/features` → `{ channels: bool, vendor_watch: bool, ... }`
-
----
-
-## Intelligence Architecture — Chief of Staff System
-
-**Layer 1: Python Detectors (nightly, ₹0)**
-`compute/pattern_detectors.py` → `intelligence_findings` table. Coded rules, get better with more data.
-
-**Layer 2: Claude Weekly Batch (Sunday, ~₹10/week)**
-`intelligence/weekly_analysis.py` → `insights_journal` table. Creative cross-signal analysis.
-
-**Layer 3: Conversation Memory (every interaction)**
-`conversation_memory` table, injected into Claude context. System learns what owner cares about.
-
----
-
-## Tonight's Sprint Sequence
-
-1. **Verify environment** — DB accessible, env vars set, restaurant record exists
-2. **Pull real data** — backfill.py 90 days + inventory COGS + stock
-3. **Verify** — `SELECT COUNT(*) FROM orders; SELECT COUNT(*) FROM order_item_consumption;`
-4. **Compute** — Run daily_summary backfill
-5. **Intelligence** — Add schema_v3 tables, build pattern detectors, run against history
-6. **Frontend** — Wire Money Found banner, filter retail items, verify chat with real data
-7. **Demo test** — Walk through every page with real YoursTruly numbers
+Via GET /api/features
 
 ---
 
 ## Key Conventions
 
-1. All amounts = INTEGER paisa (÷ 100 for display)
-2. Indian number format: ₹1,00,000 — use formatPrice() in lib/utils.ts
-3. SQLAlchemy ORM for everything (except agent's run_sql which is intentionally raw)
-4. SWR for all frontend data fetching
-5. Widget system is universal (pages + chat + dashboards all use widget-renderer)
-6. Every query filters by restaurant_id
-7. No file over 300 lines (routers max 400)
-8. Never commit .env to git
+1. All amounts = INTEGER paisa (div 100 for display) — existing tables BigInteger
+2. New intelligence tables use NUMERIC(15,2) — never float
+3. Indian number format: Rs 1,00,000 — use formatPrice() in lib/utils.ts
+4. SQLAlchemy ORM for everything (except agent run_sql — intentionally raw)
+5. SWR for all frontend data fetching
+6. Widget system universal — pages + chat + dashboards all use widget-renderer.tsx
+7. Every query filters by restaurant_id
+8. No file over 300 lines (routers max 400)
+9. claude-sonnet-4-6 for all Claude API calls
+10. Never commit .env to git
+
+---
+
+## Environment Variables
+
+Existing: PETPOOJA_APP_KEY, PETPOOJA_APP_SECRET, PETPOOJA_ACCESS_TOKEN,
+PETPOOJA_INV_APP_KEY, PETPOOJA_INV_APP_SECRET, PETPOOJA_INV_ACCESS_TOKEN,
+DATABASE_URL, ANTHROPIC_API_KEY, WHATSAPP_ACCESS_TOKEN,
+WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_VERIFY_TOKEN, OWNER_WHATSAPP, OPENAI_API_KEY
+
+New (add as you build each module):
+GOOGLE_PLACES_API_KEY, SERPER_API_KEY, IMD_API_KEY,
+APMC_API_ENDPOINT, DRIK_PANCHANG_API_KEY
