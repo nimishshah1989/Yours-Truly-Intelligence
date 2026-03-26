@@ -471,3 +471,36 @@ class AgentRunLog(Base):
     findings_count: Mapped[int] = mapped_column(Integer, default=0)
     error_message: Mapped[Optional[str]] = mapped_column(Text)
     run_metadata: Mapped[Optional[Dict]] = mapped_column(JSONB)
+
+
+# ---------------------------------------------------------------------------
+# 13. petpooja_wastage
+# ---------------------------------------------------------------------------
+class PetpoojaWastage(Base):
+    """Wastage records from PetPooja get_sales API (slType=wastage)."""
+    __tablename__ = "petpooja_wastage"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    restaurant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("restaurants.id"), nullable=False
+    )
+    outlet_code: Mapped[Optional[str]] = mapped_column(String(20))
+    sale_id: Mapped[str] = mapped_column(String(50))
+    invoice_date: Mapped[date] = mapped_column(Date, nullable=False)
+    item_id: Mapped[Optional[str]] = mapped_column(String(50))
+    item_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    category: Mapped[Optional[str]] = mapped_column(String(100))
+    quantity = mapped_column(Numeric(10, 3), default=0)
+    unit: Mapped[Optional[str]] = mapped_column(String(50))
+    price_per_unit = mapped_column(Numeric(10, 4), default=0)
+    total_amount_paisa: Mapped[int] = mapped_column(BigInteger, default=0)
+    description: Mapped[Optional[str]] = mapped_column(Text)
+    created_on: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    ingested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint("sale_id", "item_id", name="uq_wastage_sale_item"),
+        Index("idx_wastage_restaurant_date", "restaurant_id", "invoice_date"),
+    )

@@ -217,6 +217,8 @@ class InventorySnapshot(Base):
     closing_qty: Mapped[float] = mapped_column(Float, default=0)
     consumed_qty: Mapped[float] = mapped_column(Float, default=0)
     wasted_qty: Mapped[float] = mapped_column(Float, default=0)
+    outlet_code: Mapped[Optional[str]] = mapped_column(String(20))
+    average_purchase_price: Mapped[int] = mapped_column(BigInteger, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     __table_args__ = (
@@ -231,22 +233,29 @@ class PurchaseOrder(Base):
     restaurant_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("restaurants.id"), nullable=False
     )
-    vendor_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    purchase_id: Mapped[Optional[str]] = mapped_column(String(50))
+    vendor_name: Mapped[str] = mapped_column(String(255), nullable=False)
     item_name: Mapped[str] = mapped_column(String(200), nullable=False)
     quantity: Mapped[float] = mapped_column(Float, default=0)
     unit: Mapped[str] = mapped_column(String(30), default="kg")
+    category: Mapped[Optional[str]] = mapped_column(String(100))
 
     # Amounts in paisa
     unit_cost: Mapped[int] = mapped_column(BigInteger, default=0)
     total_cost: Mapped[int] = mapped_column(BigInteger, default=0)
 
     order_date: Mapped[date] = mapped_column(Date, nullable=False)
+    invoice_number: Mapped[Optional[str]] = mapped_column(String(100))
     delivery_date: Mapped[Optional[date]] = mapped_column(Date)
+    payment_status: Mapped[str] = mapped_column(String(30), default="Unpaid")
+    outlet_code: Mapped[Optional[str]] = mapped_column(String(20))
+    department: Mapped[Optional[str]] = mapped_column(String(255))
     status: Mapped[str] = mapped_column(String(30), default="delivered")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     __table_args__ = (
         Index("ix_purchase_orders_restaurant_date", "restaurant_id", "order_date"),
+        Index("ix_purchase_orders_outlet", "outlet_code"),
     )
 
 

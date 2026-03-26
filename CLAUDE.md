@@ -87,8 +87,16 @@ Code: backend/ingestion/petpooja_stock.py (BUILT)
 **Purchase API**
 ```
 Endpoint: https://api.petpooja.com/V1/thirdparty/get_purchase/
-Date format: DD-MM-YYYY, max 1-month range, requires BOTH cookies
-Code: NOT YET BUILT
+Date format: DD-MM-YYYY, max 1-month range, requires Cookie header
+Code: backend/ingestion/petpooja_purchases.py (BUILT — multi-outlet, refId pagination)
+```
+
+**Wastage API (via Sales endpoint)**
+```
+Endpoint: https://api.petpooja.com/V1/thirdparty/get_sales/
+Param: slType="wastage"
+Date format: DD-MM-YYYY, max 1-month range, requires Cookie header
+Code: backend/ingestion/petpooja_wastage.py (BUILT)
 ```
 
 **Menu API**
@@ -97,6 +105,28 @@ Endpoint: https://onlineapipp.petpooja.com/thirdparty_fetch_dinein_menu
 Headers: HYPHENATED — app-key, app-secret, access-token (NOT underscores)
 Code: backend/etl/etl_menu.py (BUILT)
 ```
+
+### Data Sources — Confirmed Credentials (Sub-Outlets)
+
+All 4 sub-outlets share the same inventory API credentials:
+```
+app_key:      rpvg7joamn421d3u0x5qhk9ze8sibtcw
+app_secret:   c7b1e4b80a2d1bfbf67da2bc81ca9dd9bf019b3e
+access_token: 7334c01be3a9677868cbf1402880340e79e1ea84
+Cookie:       PETPOOJA_API=9e2noc70kveml2pe3nps32sp13
+```
+
+| Outlet | menuSharingCode | Role | Stock items | Purchases |
+|--------|----------------|------|-------------|-----------|
+| YTC Store | sbnip54eox | Central warehouse | 1,643 | YES — all vendor purchases |
+| YTC Barista | xg85t7nm1i | Barista station | 207 | No |
+| YTC Kitchen | bwd6gaon1k | Kitchen | TBD | No |
+| YTC Bakery | 4vwy1ouxzf | Bakery | TBD | No |
+
+- YTC Store is the ONLY outlet with purchase records — all vendor POs land here
+- Kitchen/Barista/Bakery receive stock via internal transfers (not in API yet)
+- Stock API uses YYYY-MM-DD format, returns closing stock for completed days only
+- Purchase/Wastage APIs use DD-MM-YYYY format
 
 ### API Quirks — Memorise These
 1. T-1 lag: Pass D+1 to get day D data
@@ -223,9 +253,15 @@ Original build order (for reference):
 8. External data feeds
 
 Still needed from Phase 1 before Phase 2:
-- ingestion/petpooja_purchases.py — purchase data
+- ~~ingestion/petpooja_purchases.py — purchase data~~ DONE (multi-outlet, refId pagination)
 - Item classification column on menu_items
 - AvT computation (compute/avt_daily.py)
+
+Completed data ingestion (March 2026):
+- petpooja_purchases.py — 4 sub-outlets, refId pagination, per-item flattening
+- petpooja_stock.py — multi-outlet with outlet_code
+- petpooja_wastage.py — wastage records from get_sales API
+- ingredient_costs.py — cost lookup for Maya/Arjun (purchase → stock fallback)
 
 ---
 
