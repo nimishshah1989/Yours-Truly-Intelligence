@@ -281,6 +281,78 @@ class TestArjunCulturalModifier:
         assert isinstance(findings, list)
 
 
+# ── Supplier concentration tests ──────────────────────────────────────────
+
+def _make_purchase_orders(db, restaurant_id, vendor_data: list[tuple]):
+    """Insert purchase orders. vendor_data = [(vendor_name, total_cost, count)]."""
+    from core.models import PurchaseOrder
+
+    today = date.today()
+    for vendor_name, total_cost, count in vendor_data:
+        for i in range(count):
+            po = PurchaseOrder(
+                restaurant_id=restaurant_id,
+                vendor_name=vendor_name,
+                item_name=f"Item {i}",
+                quantity=1,
+                unit="kg",
+                unit_cost=total_cost // count,
+                total_cost=total_cost // count,
+                order_date=today - timedelta(days=i + 1),
+            )
+            db.add(po)
+    db.flush()
+
+
+class TestArjunSupplierConcentration:
+    def test_flags_concentrated_vendor(self, db, restaurant_id):
+        """Flag when a single vendor > 35% of spend."""
+        _make_purchase_orders(db, restaurant_id, [
+            ("Alp Business Services", 4000000, 10),   # 40% of 10M
+            ("Fresh Farms", 2000000, 8),               # 20%
+            ("Metro Cash", 1500000, 5),                # 15%
+            ("Others A", 1500000, 4),                  # 15%
+            ("Others B", 1000000, 3),                  # 10%
+        ])
+
+        agent = ArjunAgent(
+            restaurant_id=restaurant_id, db_session=db, readonly_db=db
+        )
+        finding = agent._analyze_supplier_concentration()
+        assert finding is not None
+        assert "Alp Business" in finding.finding_text
+        assert finding.confidence_score == 85
+
+    def test_no_alert_when_diversified(self, db, restaurant_id):
+        """No alert when no vendor exceeds 35%."""
+        _make_purchase_orders(db, restaurant_id, [
+            ("Vendor A", 2500000, 5),   # 25%
+            ("Vendor B", 2500000, 5),   # 25%
+            ("Vendor C", 2500000, 5),   # 25%
+            ("Vendor D", 2500000, 5),   # 25%
+        ])
+
+        agent = ArjunAgent(
+            restaurant_id=restaurant_id, db_session=db, readonly_db=db
+        )
+        finding = agent._analyze_supplier_concentration()
+        assert finding is None
+
+    def test_excludes_internal_roastery(self, db, restaurant_id):
+        """Internal vendor (own roastery) should not trigger alert."""
+        _make_purchase_orders(db, restaurant_id, [
+            ("Yours Truly Coffee Roaster LLP", 5000000, 10),  # 50% but internal
+            ("Vendor B", 3000000, 5),                          # 30%
+            ("Vendor C", 2000000, 5),                          # 20%
+        ])
+
+        agent = ArjunAgent(
+            restaurant_id=restaurant_id, db_session=db, readonly_db=db
+        )
+        finding = agent._analyze_supplier_concentration()
+        assert finding is None  # Internal vendor excluded
+
+
 # ── Max findings test ──────────────────────────────────────────────────────
 
 class TestArjunMaxFindings:

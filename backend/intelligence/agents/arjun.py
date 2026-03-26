@@ -36,6 +36,8 @@ logger = logging.getLogger("ytip.agents.arjun")
 WASTE_RATIO_THRESHOLD = 0.30  # 30% waste triggers finding
 WASTE_WEEKS_THRESHOLD = 3  # 3 consecutive weeks = chronic
 LOOKBACK_WEEKS = 4  # 4 weeks for DOW baseline
+SUPPLIER_CONCENTRATION_THRESHOLD = 0.35  # 35% of spend from one vendor
+SUPPLIER_LOOKBACK_DAYS = 90
 MAX_FINDINGS = 2
 
 # Salary cycle modifiers
@@ -77,6 +79,7 @@ class ArjunAgent(BaseAgent):
             analyses = [
                 self._analyze_prep_recommendation,
                 self._analyze_waste_patterns,
+                self._analyze_supplier_concentration,
             ]
 
             for analysis in analyses:
@@ -540,6 +543,142 @@ class ArjunAgent(BaseAgent):
             )
         except Exception as e:
             logger.warning("Waste pattern analysis failed: %s", e)
+            return None
+
+    @staticmethod
+    def _normalize_vendor_name(raw_name: str) -> str:
+        """Normalize PetPooja vendor names that have accounting suffixes.
+
+        E.g. "Alp Business Services Pvt Ltd - Creditors" and
+        "Alp Business Services Private Limited" become the same key.
+        """
+        import re
+
+        name = (raw_name or "").strip()
+        # Strip accounting suffixes: "- Creditors", "- Wb", "- Roastry CR"
+        name = re.sub(r"\s*-\s*(Creditors|Wb|Roastry\s*CR)\s*$", "", name, flags=re.IGNORECASE)
+        # Normalize legal entity forms
+        name = re.sub(r"\bPvt\.?\s*Ltd\.?\b", "Private Limited", name, flags=re.IGNORECASE)
+        name = re.sub(r"\bPrivate\s+Limited\b", "Private Limited", name, flags=re.IGNORECASE)
+        name = re.sub(r"\bLlp\b", "LLP", name, flags=re.IGNORECASE)
+        return name.strip()
+
+    def _analyze_supplier_concentration(self) -> Optional[Finding]:
+        """Flag if a single vendor accounts for >35% of total purchase spend.
+
+        Normalizes vendor names (PetPooja adds "- Creditors", "- Wb" suffixes).
+        Excludes internal vendor (own roastery) from concentration alert
+        since that's an intercompany transfer, not supplier risk.
+        """
+        try:
+            from core.models import PurchaseOrder
+
+            today = date.today()
+            cutoff = today - timedelta(days=SUPPLIER_LOOKBACK_DAYS)
+
+            vendor_spend = (
+                self.rodb.query(
+                    PurchaseOrder.vendor_name,
+                    func.sum(PurchaseOrder.total_cost).label("total"),
+                    func.count(PurchaseOrder.id).label("order_count"),
+                )
+                .filter(
+                    PurchaseOrder.restaurant_id == self.restaurant_id,
+                    PurchaseOrder.order_date >= cutoff,
+                    PurchaseOrder.total_cost > 0,
+                )
+                .group_by(PurchaseOrder.vendor_name)
+                .all()
+            )
+
+            if not vendor_spend or len(vendor_spend) < 2:
+                return None
+
+            # Normalize and merge vendor names
+            merged: dict[str, dict] = {}
+            for v in vendor_spend:
+                key = self._normalize_vendor_name(v.vendor_name)
+                if key not in merged:
+                    merged[key] = {"vendor": key, "total": 0, "order_count": 0,
+                                   "raw_names": []}
+                merged[key]["total"] += v.total
+                merged[key]["order_count"] += v.order_count
+                merged[key]["raw_names"].append(v.vendor_name)
+
+            total_spend = sum(m["total"] for m in merged.values())
+            if total_spend == 0:
+                return None
+
+            # Sort by spend descending
+            vendors = sorted(merged.values(), key=lambda v: v["total"], reverse=True)
+
+            # Find concentrated vendors (exclude internal roastery)
+            internal_keywords = ["yours truly", "ytc", "roaster"]
+            concentrated = []
+            for v in vendors:
+                name_lower = v["vendor"].lower()
+                is_internal = any(kw in name_lower for kw in internal_keywords)
+                share = v["total"] / total_spend
+
+                if share >= SUPPLIER_CONCENTRATION_THRESHOLD and not is_internal:
+                    concentrated.append({
+                        "vendor": v["vendor"],
+                        "spend_paisa": v["total"],
+                        "share": round(share, 4),
+                        "order_count": v["order_count"],
+                    })
+
+            if not concentrated:
+                return None
+
+            worst = concentrated[0]
+            top_5 = [
+                {
+                    "vendor": v["vendor"],
+                    "spend_paisa": v["total"],
+                    "share": round(v["total"] / total_spend, 4),
+                }
+                for v in vendors[:5]
+            ]
+
+            return Finding(
+                agent_name=self.agent_name,
+                restaurant_id=self.restaurant_id,
+                category=self.category,
+                urgency=Urgency.STRATEGIC,
+                optimization_impact=OptimizationImpact.RISK_MITIGATION,
+                finding_text=(
+                    f"{worst['vendor']} accounts for {worst['share'] * 100:.0f}% "
+                    f"of your purchase spend ({_format_rupees(worst['spend_paisa'])}) "
+                    f"over the past {SUPPLIER_LOOKBACK_DAYS} days. "
+                    f"This concentration creates supply chain risk — "
+                    f"if they have a disruption, your operations are affected."
+                ),
+                action_text=(
+                    f"Identify 1-2 alternative suppliers for the items you buy "
+                    f"from {worst['vendor']}. Even getting quotes creates "
+                    f"negotiating leverage and a backup plan. "
+                    f"Target: reduce single-vendor dependency to under 30%."
+                ),
+                evidence_data={
+                    "concentrated_vendor": worst["vendor"],
+                    "vendor_share": worst["share"],
+                    "vendor_spend_paisa": worst["spend_paisa"],
+                    "total_spend_paisa": total_spend,
+                    "top_5_vendors": top_5,
+                    "vendor_count": len(merged),
+                    "lookback_days": SUPPLIER_LOOKBACK_DAYS,
+                    "deviation_pct": worst["share"],
+                    "data_points_count": sum(
+                        v["order_count"] for v in merged.values()
+                    ),
+                },
+                confidence_score=85,
+                action_deadline=today + timedelta(days=14),
+                estimated_impact_size=ImpactSize.MEDIUM,
+            )
+        except Exception as e:
+            logger.warning("Supplier concentration analysis failed: %s", e)
             return None
 
     def _get_item_cost(self, item_name: str) -> int:
