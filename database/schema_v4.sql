@@ -320,3 +320,44 @@ CREATE TABLE IF NOT EXISTS agent_run_log (
     error_message   TEXT,
     run_metadata    JSONB
 );
+
+-- ---------------------------------------------------------------------------
+-- 13. petpooja_wastage
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS petpooja_wastage (
+    id                  SERIAL PRIMARY KEY,
+    restaurant_id       INTEGER NOT NULL REFERENCES restaurants(id),
+    outlet_code         VARCHAR(20),
+    sale_id             VARCHAR(50),
+    invoice_date        DATE NOT NULL,
+    item_id             VARCHAR(50),
+    item_name           VARCHAR(255) NOT NULL,
+    category            VARCHAR(100),
+    quantity            NUMERIC(10,3) DEFAULT 0,
+    unit                VARCHAR(50),
+    price_per_unit      NUMERIC(10,4) DEFAULT 0,
+    total_amount_paisa  BIGINT DEFAULT 0,
+    description         TEXT,
+    created_on          TIMESTAMPTZ,
+    ingested_at         TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT uq_wastage_sale_item UNIQUE (sale_id, item_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_wastage_restaurant_date ON petpooja_wastage(restaurant_id, invoice_date);
+
+-- ---------------------------------------------------------------------------
+-- Add outlet_code to existing tables (safe ALTER IF NOT EXISTS pattern)
+-- ---------------------------------------------------------------------------
+DO $$ BEGIN
+    ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS outlet_code VARCHAR(20);
+    ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS purchase_id VARCHAR(50);
+    ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS invoice_number VARCHAR(100);
+    ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS payment_status VARCHAR(30) DEFAULT 'Unpaid';
+    ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS department VARCHAR(255);
+    ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS category VARCHAR(100);
+    ALTER TABLE inventory_snapshots ADD COLUMN IF NOT EXISTS outlet_code VARCHAR(20);
+    ALTER TABLE inventory_snapshots ADD COLUMN IF NOT EXISTS average_purchase_price BIGINT DEFAULT 0;
+EXCEPTION WHEN duplicate_column THEN NULL;
+END $$;
+
+CREATE INDEX IF NOT EXISTS ix_purchase_orders_outlet ON purchase_orders(outlet_code);
