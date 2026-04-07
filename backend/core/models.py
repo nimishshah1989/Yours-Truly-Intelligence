@@ -250,6 +250,7 @@ class PurchaseOrder(Base):
     payment_status: Mapped[str] = mapped_column(String(30), default="Unpaid")
     outlet_code: Mapped[Optional[str]] = mapped_column(String(20))
     department: Mapped[Optional[str]] = mapped_column(String(255))
+    is_staff_cost: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[str] = mapped_column(String(30), default="delivered")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
