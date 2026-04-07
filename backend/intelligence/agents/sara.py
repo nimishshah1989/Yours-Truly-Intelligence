@@ -118,12 +118,53 @@ class SaraAgent(BaseAgent):
         findings.sort(key=lambda f: f.confidence_score, reverse=True)
         return findings[:MAX_FINDINGS]
 
+    def _get_excluded_phones(self) -> set[str]:
+        """Load excluded customer phones for this restaurant."""
+        try:
+            from intelligence.models import ExcludedCustomer
+
+            exclusions = (
+                self.rodb.query(ExcludedCustomer.phone)
+                .filter(
+                    ExcludedCustomer.restaurant_id == self.restaurant_id,
+                    ExcludedCustomer.phone.isnot(None),
+                )
+                .all()
+            )
+            return {e.phone for e in exclusions}
+        except Exception as exc:
+            logger.debug("Could not load excluded customers: %s", exc)
+            return set()
+
+    def _get_excluded_names(self) -> set[str]:
+        """Load excluded customer names (for phone=NULL fallback)."""
+        try:
+            from intelligence.models import ExcludedCustomer
+
+            exclusions = (
+                self.rodb.query(ExcludedCustomer.name)
+                .filter(
+                    ExcludedCustomer.restaurant_id == self.restaurant_id,
+                    ExcludedCustomer.name.isnot(None),
+                )
+                .all()
+            )
+            return {e.name.strip().lower() for e in exclusions if e.name}
+        except Exception as exc:
+            logger.debug("Could not load excluded names: %s", exc)
+            return set()
+
     def _get_customer_data(self) -> list[dict]:
         """Get customer data — prefer resolved_customers, fall back to raw.
+
+        Filters out excluded customers (staff, owner, friends, test accounts).
 
         Returns list of dicts with: id, name, last_order_date,
         order_count_90d, total_spend_90d, first_order_date.
         """
+        excluded_phones = self._get_excluded_phones()
+        excluded_names = self._get_excluded_names()
+
         # Try resolved_customers first
         try:
             from intelligence.models import ResolvedCustomer
@@ -137,19 +178,33 @@ class SaraAgent(BaseAgent):
             )
 
             if resolved and len(resolved) >= 5:
-                return [
-                    {
+                results = []
+                for rc in resolved:
+                    if not rc.total_orders or rc.total_orders <= 0:
+                        continue
+
+                    # Filter by excluded phones
+                    rc_phones = rc.phone_numbers or []
+                    if isinstance(rc_phones, str):
+                        rc_phones = [rc_phones]
+                    if any(p in excluded_phones for p in rc_phones):
+                        continue
+
+                    # Filter by excluded names (fallback for phone=NULL)
+                    if rc.display_name and rc.display_name.strip().lower() in excluded_names:
+                        continue
+
+                    results.append({
                         "id": rc.id,
                         "name": rc.display_name,
+                        "phone": rc_phones[0] if rc_phones else None,
                         "last_order_date": rc.last_seen,
                         "order_count": rc.total_orders,
                         "total_spend": rc.total_spend_paisa,
                         "first_order_date": rc.first_seen,
                         "source": "resolved",
-                    }
-                    for rc in resolved
-                    if rc.total_orders and rc.total_orders > 0
-                ]
+                    })
+                return results
         except Exception as e:
             logger.debug("Resolved customers unavailable: %s", e)
 
@@ -169,8 +224,12 @@ class SaraAgent(BaseAgent):
             if not customers:
                 return []
 
-            return [
-                {
+            results = []
+            for c in customers:
+                # Filter by excluded names
+                if c.name and c.name.strip().lower() in excluded_names:
+                    continue
+                results.append({
                     "id": c.id,
                     "name": c.name,
                     "last_order_date": c.last_visit,
@@ -178,9 +237,8 @@ class SaraAgent(BaseAgent):
                     "total_spend": c.total_spend,
                     "first_order_date": c.first_visit,
                     "source": "raw",
-                }
-                for c in customers
-            ]
+                })
+            return results
         except Exception as e:
             logger.warning("Failed to load customer data: %s", e)
             return []

@@ -63,6 +63,7 @@ def get_ingredient_cost(
             PurchaseOrder.outlet_code == PRIMARY_OUTLET,
             PurchaseOrder.order_date >= cutoff,
             PurchaseOrder.unit_cost > 0,
+            PurchaseOrder.is_staff_cost.is_(False),
         )
         .order_by(desc(PurchaseOrder.order_date))
         .first()
