@@ -41,7 +41,9 @@ A restaurant intelligence engine acting as Chief of Staff for YoursTruly Coffee 
 | Backend | FastAPI (Python 3.11+) + SQLAlchemy ORM |
 | Frontend | Next.js 14 App Router + Tailwind + shadcn/ui (light theme) |
 | Database | RDS PostgreSQL (AWS ap-south-1) |
-| AI | Claude claude-sonnet-4-6 for all agent calls |
+| AI — Executive | Claude claude-sonnet-4-6 for agent reasoning, QC, synthesis, onboarding |
+| AI — Workhorse | Groq (Llama 3.1/3.3 70B) for summarization, parsing, sentiment extraction |
+| AI — Embeddings | OpenAI text-embedding-3-small for knowledge base vectors |
 | Hosting | AWS EC2 Mumbai — port 8002 (never 8000 — conflicts with JIP) |
 
 **Hard rules:**
@@ -200,6 +202,7 @@ Nothing bypasses Quality Council. Ever.
 | Building Priya / cultural calendar | docs/CULTURAL_MODEL.md |
 | Schema or data model work | docs/ARCHITECTURE.md |
 | Feature scope decisions | docs/PRD.md |
+| Full build plan from current state | docs/PRODUCTION_PRD.md |
 | Quality council logic | docs/AGENTS.md Quality Council section |
 
 ---
@@ -251,8 +254,9 @@ Via GET /api/features
 6. Widget system universal — pages + chat + dashboards all use widget-renderer.tsx
 7. Every query filters by restaurant_id
 8. No file over 300 lines (routers max 400)
-9. claude-sonnet-4-6 for all Claude API calls
+9. Dual-LLM: Claude Sonnet for agent reasoning/QC/synthesis/onboarding; Groq for summarization/parsing/sentiment. All routed via `backend/intelligence/infrastructure/llm_router.py`
 10. Never commit .env to git
+11. OpenAI text-embedding-3-small for all vector embeddings (1536 dims)
 
 ---
 
@@ -264,8 +268,8 @@ DATABASE_URL, ANTHROPIC_API_KEY, WHATSAPP_ACCESS_TOKEN,
 WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_VERIFY_TOKEN, OWNER_WHATSAPP, OPENAI_API_KEY
 
 New (add as you build each module):
-GOOGLE_PLACES_API_KEY, SERPER_API_KEY, IMD_API_KEY,
-APMC_API_ENDPOINT, DRIK_PANCHANG_API_KEY
+GROQ_API_KEY, GOOGLE_PLACES_API_KEY, SERPER_API_KEY, IMD_API_KEY,
+APMC_API_ENDPOINT, DRIK_PANCHANG_API_KEY, APIFY_API_TOKEN
 
 ---
 
