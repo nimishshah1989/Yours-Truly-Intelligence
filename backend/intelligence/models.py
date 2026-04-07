@@ -504,3 +504,26 @@ class PetpoojaWastage(Base):
         UniqueConstraint("sale_id", "item_id", name="uq_wastage_sale_item"),
         Index("idx_wastage_restaurant_date", "restaurant_id", "invoice_date"),
     )
+
+
+# ---------------------------------------------------------------------------
+# 14. excluded_customers
+# ---------------------------------------------------------------------------
+class ExcludedCustomer(Base):
+    """Customers excluded from intelligence analysis (staff, owner, friends, test)."""
+    __tablename__ = "excluded_customers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    restaurant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("restaurants.id"), nullable=False
+    )
+    phone: Mapped[Optional[str]] = mapped_column(String(20))
+    reason: Mapped[str] = mapped_column(String(50), nullable=False)
+    name: Mapped[Optional[str]] = mapped_column(String(100))
+    added_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        Index("idx_excluded_customers_restaurant", "restaurant_id"),
+    )
