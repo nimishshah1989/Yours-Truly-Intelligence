@@ -16,11 +16,9 @@ import logging
 import os
 from collections import defaultdict
 from datetime import date, datetime, timedelta
-from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import func, and_
-from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from intelligence.agents.base_agent import (
     BaseAgent,
@@ -79,6 +77,7 @@ class ArjunAgent(BaseAgent):
             analyses = [
                 self._analyze_prep_recommendation,
                 self._analyze_waste_patterns,
+                self._analyze_ingredient_cost_spike,
                 self._analyze_supplier_concentration,
             ]
 
@@ -335,33 +334,53 @@ class ArjunAgent(BaseAgent):
             prep_up.sort(key=lambda x: abs(x["diff_pct"]), reverse=True)
             prep_down.sort(key=lambda x: abs(x["diff_pct"]), reverse=True)
 
-            # Build finding text
-            up_lines = []
-            for item in prep_up[:3]:
-                up_lines.append(
-                    f"{item['name']}: {item['recommended']} portions "
-                    f"(was {item['recent']} last week)"
-                )
-
-            down_lines = []
-            for item in prep_down[:3]:
-                down_lines.append(
-                    f"{item['name']}: {item['recommended']} portions "
-                    f"(was {item['recent']} last week)"
-                )
-
-            finding_parts = []
-            if up_lines:
-                finding_parts.append(
-                    "Prep more: " + "; ".join(up_lines)
-                )
-            if down_lines:
-                finding_parts.append(
-                    "Prep less: " + "; ".join(down_lines)
-                )
-
             day_names = ["Monday", "Tuesday", "Wednesday", "Thursday",
                          "Friday", "Saturday", "Sunday"]
+            today_name = day_names[today_dow]
+
+            # Build per-item action lines with specific portion targets
+            action_lines = []
+            for item in prep_up[:5]:
+                reason = f"{LOOKBACK_WEEKS}-wk avg {item['base']}"
+                if week_of_month == 1:
+                    reason += " + salary week uplift on premium items"
+                elif week_of_month == 4:
+                    reason += " + month-end value shift"
+                action_lines.append(
+                    f"• {item['name']}: {item['recommended']} portions "
+                    f"({reason})"
+                )
+            for item in prep_down[:5]:
+                action_lines.append(
+                    f"• {item['name']}: reduce to {item['recommended']} portions "
+                    f"({LOOKBACK_WEEKS}-wk avg {item['base']}, trending down)"
+                )
+
+            # Estimate impact: sum of waste-avoidable cost from prep_down items
+            total_impact_paisa = 0
+            for item in prep_down:
+                excess = item["recent"] - item["recommended"]
+                if excess > 0:
+                    cost = self._get_item_cost(item["name"])
+                    total_impact_paisa += excess * cost
+
+            # Build salary week context
+            salary_note = ""
+            if week_of_month == 1:
+                salary_note = "Salary week — expect slight premium uplift. "
+            elif week_of_month == 4:
+                salary_note = "Month-end — value items may see higher demand. "
+
+            finding_text = (
+                f"{today_name} prep targets based on {LOOKBACK_WEEKS}-week "
+                f"same-day pattern. {salary_note}"
+                f"{len(prep_up) + len(prep_down)} items adjusted."
+            )
+
+            action_text = (
+                f"{today_name} prep targets:\n"
+                + "\n".join(action_lines)
+            )
 
             return Finding(
                 agent_name=self.agent_name,
@@ -369,20 +388,14 @@ class ArjunAgent(BaseAgent):
                 category=self.category,
                 urgency=Urgency.IMMEDIATE,
                 optimization_impact=OptimizationImpact.RISK_MITIGATION,
-                finding_text=(
-                    f"Prep guide for {day_names[today_dow]}: "
-                    + ". ".join(finding_parts)
-                ),
-                action_text=(
-                    f"Adjust today's prep quantities based on {LOOKBACK_WEEKS}-week "
-                    f"same-day average, modified for salary cycle (week {week_of_month}) "
-                    f"and recent demand trends."
-                ),
+                finding_text=finding_text,
+                action_text=action_text,
                 evidence_data={
+                    "day_of_week": today_name,
+                    "week_of_month": week_of_month,
+                    "items_adjusted": len(prep_up) + len(prep_down),
                     "prep_up": prep_up[:5],
                     "prep_down": prep_down[:5],
-                    "today_dow": day_names[today_dow],
-                    "week_of_month": week_of_month,
                     "cultural_events_active": list(cultural_mods.keys()),
                     "data_points_count": len(item_demand),
                     "deviation_pct": max(
@@ -390,9 +403,13 @@ class ArjunAgent(BaseAgent):
                         for item in (prep_up + prep_down)
                     ) if (prep_up or prep_down) else 0,
                 },
-                confidence_score=70,
+                confidence_score=78,
                 action_deadline=today,
                 estimated_impact_size=ImpactSize.MEDIUM,
+                estimated_impact_paisa=(
+                    total_impact_paisa if total_impact_paisa > 0
+                    else None
+                ),
             )
         except Exception as e:
             logger.warning("Prep recommendation analysis failed: %s", e)
@@ -497,7 +514,54 @@ class ArjunAgent(BaseAgent):
 
             # Estimate cost impact (use menu item cost_price if available)
             cost_per_portion = self._get_item_cost(worst["name"])
-            weekly_waste_cost = int(worst["avg_wasted"] * cost_per_portion) if cost_per_portion else 0
+            weekly_waste_cost = (
+                int(worst["avg_wasted"] * cost_per_portion)
+                if cost_per_portion else 0
+            )
+
+            # Calculate reduction target: avg consumed + 30% buffer
+            reduction_target = round(worst["avg_consumed"] * 1.30)
+            weekly_saving = 0
+            if cost_per_portion and reduction_target < worst["avg_prepped"]:
+                saved_portions = worst["avg_prepped"] - reduction_target
+                weekly_saving = int(saved_portions * cost_per_portion)
+
+            monthly_waste_cost = weekly_waste_cost * 4
+
+            finding_text = (
+                f"{worst['name']}: prepping {worst['avg_prepped']:.0f} every week, "
+                f"average sale is {worst['avg_consumed']:.0f}. "
+                f"{worst['waste_ratio'] * 100:.0f}% waste rate — "
+                f"{worst['avg_wasted']:.0f} portions discarded weekly "
+                f"for {worst['consecutive_weeks']} consecutive weeks."
+            )
+            if weekly_waste_cost > 0:
+                finding_text += (
+                    f" Cost: {_format_rupees(weekly_waste_cost)}/week "
+                    f"({_format_rupees(monthly_waste_cost)}/month)."
+                )
+
+            action_text = (
+                f"Reduce {worst['name']} prep to {reduction_target} portions "
+                f"(avg {worst['avg_consumed']:.0f} + 30% buffer). "
+            )
+            if worst["avg_prepped"] > 15:
+                # Suggest batch prep for larger quantities
+                first_batch = round(reduction_target * 0.6)
+                second_batch = reduction_target - first_batch
+                action_text += (
+                    f"Prep in two batches ({first_batch} at open, "
+                    f"{second_batch} at 11:30am) instead of all at once. "
+                )
+            if weekly_saving > 0:
+                action_text += (
+                    f"Saves {_format_rupees(weekly_saving)}/week "
+                    f"({_format_rupees(weekly_saving * 4)}/month). "
+                )
+            action_text += (
+                f"If you sell out by 1pm two weeks in a row, "
+                f"bump to {reduction_target + 2}."
+            )
 
             return Finding(
                 agent_name=self.agent_name,
@@ -505,41 +569,32 @@ class ArjunAgent(BaseAgent):
                 category=self.category,
                 urgency=Urgency.THIS_WEEK,
                 optimization_impact=OptimizationImpact.MARGIN_IMPROVEMENT,
-                finding_text=(
-                    f"{worst['name']} is being prepped {worst['avg_prepped']:.0f} "
-                    f"portions on average but only {worst['avg_consumed']:.0f} are "
-                    f"consumed — {worst['avg_wasted']:.0f} portions wasted weekly. "
-                    f"Waste ratio: {worst['waste_ratio'] * 100:.0f}% for "
-                    f"{worst['consecutive_weeks']} consecutive weeks."
-                    + (f" At current food cost this is "
-                       f"{_format_rupees(weekly_waste_cost)} in weekly waste."
-                       if weekly_waste_cost > 0 else "")
-                ),
-                action_text=(
-                    f"Reduce {worst['name']} prep to {worst['avg_consumed']:.0f} "
-                    f"portions. If demand picks up, prep more is always possible. "
-                    + (f"Projected weekly saving: {_format_rupees(weekly_waste_cost)}."
-                       if weekly_waste_cost > 0
-                       else "Track savings after adjustment.")
-                ),
+                finding_text=finding_text,
+                action_text=action_text,
                 evidence_data={
-                    "chronic_waste_items": chronic_waste[:5],
-                    "worst_item": worst["name"],
+                    "item": worst["name"],
+                    "prep_qty": worst["avg_prepped"],
+                    "avg_sold": worst["avg_consumed"],
                     "waste_ratio": worst["waste_ratio"],
-                    "consecutive_weeks": worst["consecutive_weeks"],
-                    "weekly_waste_cost_paisa": weekly_waste_cost,
+                    "weeks_observed": worst["consecutive_weeks"],
+                    "cost_per_portion_paisa": cost_per_portion,
+                    "chronic_waste_items": chronic_waste[:5],
                     "deviation_pct": worst["waste_ratio"],
                     "data_points_count": sum(
                         len(wd) for wd in item_weeks.values()
                     ),
-                    "baseline_mean": worst["avg_consumed"],
-                    "current_value": worst["avg_prepped"],
-                    "baseline_std": 0,
                 },
                 confidence_score=75,
                 action_deadline=date.today() + timedelta(days=7),
-                estimated_impact_size=ImpactSize.MEDIUM if weekly_waste_cost < 500000 else ImpactSize.HIGH,
-                estimated_impact_paisa=weekly_waste_cost * 4 if weekly_waste_cost else None,
+                estimated_impact_size=(
+                    ImpactSize.MEDIUM if weekly_waste_cost < 500000
+                    else ImpactSize.HIGH
+                ),
+                estimated_impact_paisa=(
+                    weekly_saving * 4 if weekly_saving
+                    else weekly_waste_cost * 4
+                    if weekly_waste_cost else None
+                ),
             )
         except Exception as e:
             logger.warning("Waste pattern analysis failed: %s", e)
@@ -679,6 +734,202 @@ class ArjunAgent(BaseAgent):
             )
         except Exception as e:
             logger.warning("Supplier concentration analysis failed: %s", e)
+            return None
+
+    def _analyze_ingredient_cost_spike(self) -> Optional[Finding]:
+        """Detect ingredient price spikes from external signals (APMC, supplier).
+
+        Reads external_signals for apmc_price type, finds menu items using
+        that ingredient, calculates weekly cost impact, and checks
+        non_negotiables before recommending.
+        """
+        try:
+            from intelligence.models import ExternalSignal
+            from core.models import MenuItem
+
+            today = date.today()
+            lookback = today - timedelta(days=7)
+
+            # Find recent price spike signals
+            signals = (
+                self.rodb.query(ExternalSignal)
+                .filter(
+                    ExternalSignal.signal_type == "apmc_price",
+                    ExternalSignal.signal_date >= lookback,
+                )
+                .order_by(ExternalSignal.signal_date.desc())
+                .all()
+            )
+
+            if not signals:
+                return None
+
+            # Find the most impactful spike
+            worst_spike = None
+            worst_impact = 0
+
+            for signal in signals:
+                data = signal.signal_data or {}
+                change_pct = data.get("change_pct", 0)
+                if change_pct < 0.10:  # Ignore < 10% changes
+                    continue
+
+                ingredient_key = signal.signal_key or ""
+                # Extract base ingredient name (e.g., "milk_kolkata" → "milk")
+                ingredient_name = ingredient_key.split("_")[0].lower()
+
+                # Find menu items using this ingredient
+                all_items = (
+                    self.rodb.query(MenuItem)
+                    .filter(
+                        MenuItem.restaurant_id == self.restaurant_id,
+                        MenuItem.is_active.is_(True),
+                        MenuItem.classification == "prepared",
+                    )
+                    .all()
+                )
+
+                # Match items by ingredient in name or category
+                affected_items = []
+                for mi in all_items:
+                    item_lower = mi.name.lower()
+                    cat_lower = (mi.category or "").lower()
+                    # Ingredient matching heuristics
+                    if ingredient_name == "milk":
+                        if any(kw in item_lower or kw in cat_lower
+                               for kw in ["latte", "cappuccino", "mocha",
+                                           "matcha", "chai", "chocolate",
+                                           "pancake", "french toast"]):
+                            affected_items.append(mi.name)
+                    elif ingredient_name == "coffee":
+                        if any(kw in item_lower or kw in cat_lower
+                               for kw in ["latte", "cappuccino", "mocha",
+                                           "espresso", "americano", "brew",
+                                           "coffee"]):
+                            affected_items.append(mi.name)
+                    elif ingredient_name == "egg":
+                        if any(kw in item_lower
+                               for kw in ["egg", "benedict", "french toast",
+                                           "pancake"]):
+                            affected_items.append(mi.name)
+                    else:
+                        if ingredient_name in item_lower:
+                            affected_items.append(mi.name)
+
+                if not affected_items:
+                    continue
+
+                price_today = data.get("price_today_per_litre",
+                               data.get("price_today_per_kg",
+                               data.get("price_today", 0)))
+                price_before = data.get("price_7d_ago",
+                               data.get("price_before", 0))
+                weekly_consumption = data.get("estimated_weekly_consumption",
+                                              0)
+
+                if price_today and price_before and weekly_consumption:
+                    weekly_impact = int(
+                        (price_today - price_before)
+                        * weekly_consumption
+                    )
+                else:
+                    weekly_impact = 0
+
+                if weekly_impact > worst_impact or (
+                    not worst_spike and len(affected_items) > 0
+                ):
+                    worst_impact = weekly_impact
+                    worst_spike = {
+                        "signal": signal,
+                        "data": data,
+                        "ingredient": ingredient_name,
+                        "change_pct": change_pct,
+                        "affected_items": affected_items,
+                        "weekly_impact": weekly_impact,
+                        "price_today": price_today,
+                        "price_before": price_before,
+                    }
+
+            if not worst_spike:
+                return None
+
+            s = worst_spike
+            ingredient = s["ingredient"].capitalize()
+            city = (self.profile.city if self.profile else "local")
+
+            finding_text = (
+                f"{ingredient} price up {s['change_pct'] * 100:.0f}% "
+                f"in {city} this week "
+                f"(Rs {s['price_today'] / 100:.0f}/litre vs "
+                f"Rs {s['price_before'] / 100:.0f} last week). "
+                f"This hits {len(s['affected_items'])} menu items — "
+                + ", ".join(s["affected_items"][:5])
+                + (f" and {len(s['affected_items']) - 5} more"
+                   if len(s["affected_items"]) > 5 else "")
+                + "."
+            )
+            if s["weekly_impact"] > 0:
+                finding_text += (
+                    f" Your weekly {ingredient.lower()} bill just went up "
+                    f"by {_format_rupees(s['weekly_impact'])}."
+                )
+
+            # Build action — check non_negotiables
+            non_negs = []
+            if self.profile and hasattr(self.profile, "non_negotiables"):
+                non_negs = self.profile.non_negotiables or []
+
+            action_parts = [
+                "This affects your biggest category. Three options:",
+                f"1. Absorb short-term — {ingredient.lower()} price spikes "
+                f"are often seasonal and correct within 2-3 weeks.",
+                "2. If it holds 3+ weeks, a Rs 10 increase on affected "
+                "drinks covers it (customers are least price-sensitive "
+                "on coffee).",
+                "3. Review if your supplier is passing through wholesale "
+                "increases fairly — compare with local rates.",
+            ]
+
+            # Check non-negotiables for ingredient-related restrictions
+            for nn in non_negs:
+                nn_lower = (nn or "").lower()
+                if s["ingredient"] in nn_lower or "quality" in nn_lower:
+                    action_parts.append(
+                        f"Do NOT compromise on {ingredient.lower()} quality "
+                        f"— that's a non-negotiable for your brand."
+                    )
+                    break
+
+            action_text = "\n".join(action_parts)
+
+            return Finding(
+                agent_name=self.agent_name,
+                restaurant_id=self.restaurant_id,
+                category=self.category,
+                urgency=Urgency.THIS_WEEK,
+                optimization_impact=OptimizationImpact.MARGIN_IMPROVEMENT,
+                finding_text=finding_text,
+                action_text=action_text,
+                evidence_data={
+                    "ingredient": s["ingredient"],
+                    "change_pct": s["change_pct"],
+                    "price_today": s["price_today"],
+                    "price_before": s["price_before"],
+                    "affected_items": s["affected_items"],
+                    "weekly_impact_paisa": s["weekly_impact"],
+                    "data_points_count": len(s["affected_items"]),
+                    "deviation_pct": s["change_pct"],
+                },
+                confidence_score=70,
+                action_deadline=today + timedelta(days=7),
+                estimated_impact_size=ImpactSize.MEDIUM,
+                estimated_impact_paisa=(
+                    s["weekly_impact"] * 4
+                    if s["weekly_impact"] else None
+                ),
+            )
+        except Exception as e:
+            logger.warning("Ingredient cost spike analysis failed: %s", e)
             return None
 
     def _get_item_cost(self, item_name: str) -> int:
