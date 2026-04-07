@@ -201,6 +201,7 @@ Nothing bypasses Quality Council. Ever.
 | Schema or data model work | docs/ARCHITECTURE.md |
 | Feature scope decisions | docs/PRD.md |
 | Quality council logic | docs/AGENTS.md Quality Council section |
+| Building any Phase 2 module | docs/PRODUCTION_PRD.md — find the PHASE section for your module |
 
 ---
 
@@ -210,7 +211,8 @@ Phase 1 (analytics platform) — COMPLETE
 All 6 dashboard modules, agent chat, WhatsApp webhook, multi-tenancy.
 
 Phase 2 (intelligence layer) — IN PROGRESS
-Build in this order:
+Build order: Follow docs/PRODUCTION_PRD.md exactly. Each phase has eval criteria that must pass before proceeding.
+Original build order (for reference):
 1. schema_v4.sql — new intelligence tables
 2. backend/intelligence/menu_graph/ — semantic menu understanding
 3. backend/intelligence/agents/base_agent.py — base class
