@@ -11,6 +11,7 @@ Idempotent — uses event_key as unique constraint, skips existing rows.
 
 import logging
 
+import core.models  # noqa: F401 — registers Restaurant for relationship resolution
 from core.database import SessionLocal
 from intelligence.models import CulturalEvent
 
