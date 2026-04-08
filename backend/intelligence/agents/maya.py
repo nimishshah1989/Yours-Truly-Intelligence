@@ -255,6 +255,7 @@ class MayaAgent(BaseAgent):
                 confidence_score=80,
                 action_deadline=date.today() + timedelta(days=14),
                 estimated_impact_size=ImpactSize.LOW,
+                estimated_impact_paisa=0,  # Dead SKUs: impact is in freed menu space, not direct ₹
             )
         except Exception as e:
             logger.warning("Dead SKU analysis failed: %s", e)
@@ -350,6 +351,7 @@ class MayaAgent(BaseAgent):
                     confidence_score=70,
                     action_deadline=date.today() + timedelta(days=14),
                     estimated_impact_size=ImpactSize.MEDIUM,
+                    estimated_impact_paisa=0,  # BCG questions: impact depends on promotion success
                 )
 
             if dogs and len(dogs) > 2:

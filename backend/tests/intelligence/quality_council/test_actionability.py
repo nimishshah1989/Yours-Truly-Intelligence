@@ -54,9 +54,9 @@ class TestActionabilityCheck:
 
     def test_passes_with_all_criteria(self, db, restaurant_id):
         finding = _make_finding(restaurant_id=restaurant_id)
-        passed, reason = actionability_check(finding, restaurant_id, db)
+        passed, reason, _reworked = actionability_check(finding, restaurant_id, db)
         assert passed is True
-        assert reason == "passed"
+        assert reason == "actionable"
 
     def test_fails_vague_action_text(self, db, restaurant_id):
         """Action text < 20 chars -> fail."""
@@ -64,7 +64,7 @@ class TestActionabilityCheck:
             restaurant_id=restaurant_id,
             action_text="Do something",
         )
-        passed, reason = actionability_check(finding, restaurant_id, db)
+        passed, reason, _reworked = actionability_check(finding, restaurant_id, db)
         assert passed is False
         assert reason == "action_text_too_vague"
 
@@ -73,7 +73,7 @@ class TestActionabilityCheck:
             restaurant_id=restaurant_id,
             action_deadline=None,
         )
-        passed, reason = actionability_check(finding, restaurant_id, db)
+        passed, reason, _reworked = actionability_check(finding, restaurant_id, db)
         assert passed is False
         assert reason == "no_deadline"
 
@@ -82,7 +82,7 @@ class TestActionabilityCheck:
             restaurant_id=restaurant_id,
             estimated_impact_paisa=None,
         )
-        passed, reason = actionability_check(finding, restaurant_id, db)
+        passed, reason, _reworked = actionability_check(finding, restaurant_id, db)
         assert passed is False
         assert reason == "no_estimated_impact"
 
@@ -91,9 +91,9 @@ class TestActionabilityCheck:
             restaurant_id=restaurant_id,
             action_deadline=date.today() - timedelta(days=1),
         )
-        passed, reason = actionability_check(finding, restaurant_id, db)
+        passed, reason, _reworked = actionability_check(finding, restaurant_id, db)
         assert passed is False
-        assert reason == "action_deadline_already_passed"
+        assert reason == "deadline_already_passed"
 
     def test_fails_duplicate_of_recent_sent(self, db, restaurant_id):
         """Jaccard similarity > 0.6 with recently sent finding -> duplicate."""
@@ -107,7 +107,7 @@ class TestActionabilityCheck:
             restaurant_id=restaurant_id,
             action_text=action,  # identical
         )
-        passed, reason = actionability_check(finding, restaurant_id, db)
+        passed, reason, _reworked = actionability_check(finding, restaurant_id, db)
         assert passed is False
         assert reason == "duplicate_of_recent_finding"
 
@@ -120,7 +120,7 @@ class TestActionabilityCheck:
         )
 
         finding = _make_finding(restaurant_id=restaurant_id)
-        passed, reason = actionability_check(finding, restaurant_id, db)
+        passed, reason, _reworked = actionability_check(finding, restaurant_id, db)
         assert passed is True
 
     def test_identity_conflict_flagged(self, db, restaurant_id):
@@ -155,7 +155,8 @@ class TestActionabilityCheck:
             restaurant_id=restaurant_id,
             action_text="Reduce portion sizes for the avocado toast to improve margins",
         )
-        passed, reason = actionability_check(finding, restaurant_id, db)
-        # Should still pass but with identity_conflict flag
+        passed, reason, reworked = actionability_check(finding, restaurant_id, db)
+        # Should still pass but with identity_conflict rework
         assert passed is True
         assert "identity_conflict" in reason
+        assert reworked is not None

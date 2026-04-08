@@ -408,7 +408,7 @@ class ArjunAgent(BaseAgent):
                 estimated_impact_size=ImpactSize.MEDIUM,
                 estimated_impact_paisa=(
                     total_impact_paisa if total_impact_paisa > 0
-                    else None
+                    else 0
                 ),
             )
         except Exception as e:
@@ -731,6 +731,7 @@ class ArjunAgent(BaseAgent):
                 confidence_score=85,
                 action_deadline=today + timedelta(days=14),
                 estimated_impact_size=ImpactSize.MEDIUM,
+                estimated_impact_paisa=int(float(worst["spend_paisa"]) * 0.05),  # 5% negotiation leverage estimate
             )
         except Exception as e:
             logger.warning("Supplier concentration analysis failed: %s", e)

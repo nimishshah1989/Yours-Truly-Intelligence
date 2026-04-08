@@ -57,6 +57,48 @@ def _compile_uuid_sqlite(type_, compiler, **kw):
     return "VARCHAR(36)"
 
 
+# Register bind/result processors so ARRAY values round-trip through SQLite as JSON
+import json as _json
+
+_orig_array_bind = ARRAY.bind_processor
+
+
+def _array_bind_processor_sqlite(self, dialect):
+    if dialect.name == "sqlite":
+        def process(value):
+            if value is None:
+                return None
+            return _json.dumps(value)
+        return process
+    if _orig_array_bind:
+        return _orig_array_bind(self, dialect)
+    return None
+
+
+_orig_array_result = ARRAY.result_processor
+
+
+def _array_result_processor_sqlite(self, dialect, coltype):
+    if dialect.name == "sqlite":
+        def process(value):
+            if value is None:
+                return None
+            if isinstance(value, str):
+                try:
+                    return _json.loads(value)
+                except (_json.JSONDecodeError, TypeError):
+                    return [value]
+            return value
+        return process
+    if _orig_array_result:
+        return _orig_array_result(self, dialect, coltype)
+    return None
+
+
+ARRAY.bind_processor = _array_bind_processor_sqlite
+ARRAY.result_processor = _array_result_processor_sqlite
+
+
 # Handle pgvector's Vector type if present
 try:
     from pgvector.sqlalchemy import Vector
