@@ -3,7 +3,13 @@
 Validates that a finding is statistically meaningful:
 1. Minimum 3 data points
 2. Deviation exceeds category-specific threshold
-3. Z-score > 1.5 against 8-week baseline (when data available)
+3. Z-score >= 1.5 against baseline (when data available)
+
+Category thresholds (from PRD):
+  revenue  — 15%
+  menu     — 10%
+  stock    — 30%
+  customer — 15%
 
 Returns: (passed: bool, score: float, reason: str)
 """
@@ -20,6 +26,8 @@ DEVIATION_THRESHOLDS = {
     "menu": 0.10,      # 10% CM change
     "stock": 0.30,     # 30% waste ratio
     "customer": 0.15,  # 15% retention change
+    "cultural": 0.15,  # 15% default
+    "competition": 0.15,
 }
 
 MIN_DATA_POINTS = 3
@@ -33,21 +41,20 @@ def significance_check(
 
     Args:
         finding: The Finding to evaluate.
-        restaurant_id: Restaurant context (unused currently but reserved
-            for per-restaurant threshold tuning).
+        restaurant_id: Restaurant context (reserved for per-restaurant tuning).
 
     Returns:
-        (passed, score, reason) where score is the deviation_pct.
+        (passed, score, reason) where score is the deviation_pct or z_score.
     """
     evidence = finding.evidence_data or {}
 
     # Check 1: Minimum data points
     data_points = evidence.get("data_points_count", 0)
     if data_points < MIN_DATA_POINTS:
-        return False, 0, "insufficient_data_points"
+        return False, 0.0, "insufficient_data_points"
 
     # Check 2: Deviation magnitude by category
-    deviation_pct = evidence.get("deviation_pct", 0)
+    deviation_pct = abs(evidence.get("deviation_pct", 0))
     threshold = DEVIATION_THRESHOLDS.get(finding.category, 0.15)
 
     if deviation_pct < threshold:
@@ -62,6 +69,6 @@ def significance_check(
             and current_value is not None and baseline_std > 0):
         z_score = abs(current_value - baseline_mean) / baseline_std
         if z_score < MIN_Z_SCORE:
-            return False, z_score, "not_statistically_significant"
+            return False, z_score, "z_score_below_threshold"
 
-    return True, deviation_pct, "passed"
+    return True, deviation_pct, "significant"

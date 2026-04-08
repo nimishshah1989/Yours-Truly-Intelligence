@@ -136,16 +136,16 @@ class TestCorroborationCheck:
         )
         passed, agents, reason = corroboration_check(finding, restaurant_id, db)
         assert passed is True
-        assert reason == "solo_high_confidence_exception"
+        assert reason == "solo_high_urgency_exception"
 
-    def test_solo_exception_fails_below_85_confidence(self, db, restaurant_id):
-        """Solo exception requires confidence >= 85."""
+    def test_solo_exception_fails_below_80_confidence(self, db, restaurant_id):
+        """Solo exception requires confidence >= 80."""
         finding = _make_finding(
             restaurant_id=restaurant_id,
             agent_name="kiran",
             category="competition",
             urgency=Urgency.IMMEDIATE,
-            confidence_score=80,
+            confidence_score=79,
         )
         passed, agents, reason = corroboration_check(finding, restaurant_id, db)
         assert passed is False

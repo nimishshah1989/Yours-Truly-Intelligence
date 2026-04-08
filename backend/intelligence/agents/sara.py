@@ -161,6 +161,10 @@ class SaraAgent(BaseAgent):
             return {e.phone for e in exclusions}
         except Exception as exc:
             logger.debug("Could not load excluded customers: %s", exc)
+            try:
+                self.rodb.rollback()
+            except Exception:
+                pass
             return set()
 
     def _get_excluded_names(self) -> set[str]:
@@ -179,6 +183,10 @@ class SaraAgent(BaseAgent):
             return {e.name.strip().lower() for e in exclusions if e.name}
         except Exception as exc:
             logger.debug("Could not load excluded names: %s", exc)
+            try:
+                self.rodb.rollback()
+            except Exception:
+                pass
             return set()
 
     # ------------------------------------------------------------------
@@ -232,6 +240,10 @@ class SaraAgent(BaseAgent):
                 return results
         except Exception as e:
             logger.debug("Resolved customers unavailable: %s", e)
+            try:
+                self.rodb.rollback()
+            except Exception:
+                pass
 
         # Fall back to raw customers table
         try:
@@ -487,6 +499,7 @@ class SaraAgent(BaseAgent):
                     "top_items": top_items,
                     "pattern": pattern_label,
                     "data_points_count": visits,
+                    "deviation_pct": min(days_since / max(avg_freq, 1), 3.0),
                 },
                 confidence_score=82,
                 action_deadline=today + timedelta(days=7),

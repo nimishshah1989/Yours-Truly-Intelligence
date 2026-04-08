@@ -39,7 +39,7 @@ class TestSignificanceCheck:
         finding = _make_finding()
         passed, score, reason = significance_check(finding, 1)
         assert passed is True
-        assert reason == "passed"
+        assert reason == "significant"
 
     def test_fails_insufficient_data_points(self):
         """< 3 data points -> fail."""
@@ -115,7 +115,7 @@ class TestSignificanceCheck:
         })
         passed, score, reason = significance_check(finding, 1)
         assert passed is False
-        assert reason == "not_statistically_significant"
+        assert reason == "z_score_below_threshold"
 
     def test_passes_when_no_baseline_std(self):
         """If baseline_std not provided, skip z-score check."""
