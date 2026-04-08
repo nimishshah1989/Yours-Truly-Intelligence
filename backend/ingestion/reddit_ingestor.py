@@ -42,7 +42,7 @@ REQUEST_DELAY = 2.0  # seconds between Reddit API calls (rate limit respect)
 MIN_POST_SCORE = 10  # only ingest posts with score >= this
 
 REDDIT_HEADERS = {
-    "User-Agent": "YTIP/1.0 (restaurant intelligence; contact: nimish@yourstruly.in)",
+    "User-Agent": "linux:ytip:v1.0 (by /u/ytip_bot)",
     "Accept": "application/json",
 }
 
@@ -127,8 +127,8 @@ def _fetch_subreddit_posts(
 
     Returns list of post dicts. Returns [] on any failure.
     """
-    url = f"https://www.reddit.com/r/{subreddit}/{sort}.json"
-    params = {"t": time_filter, "limit": limit}
+    url = f"https://www.reddit.com/r/{subreddit}/{sort}/.json"
+    params = {"t": time_filter, "limit": limit, "raw_json": 1}
 
     try:
         resp = httpx.get(
@@ -177,7 +177,7 @@ def _fetch_post_comments(permalink: str, limit: int = 5) -> list[str]:
 
     Returns list of comment body strings. Returns [] on failure.
     """
-    url = f"https://www.reddit.com{permalink}.json"
+    url = f"https://www.reddit.com{permalink}/.json" if not permalink.endswith("/") else f"https://www.reddit.com{permalink}.json"
     try:
         resp = httpx.get(
             url,
@@ -328,13 +328,8 @@ def ingest_reddit_posts(
                 # Chunk combined text
                 text_chunks = _chunk_text(combined_text)
                 for idx, chunk_text in enumerate(text_chunks):
-                    db.add(KnowledgeBaseChunk(
-                        document_id=doc.id,
-                        chunk_index=idx,
-                        chunk_text=chunk_text,
-                        token_count=len(chunk_text.split()),
-                        embedding=None,
-                    ))
+                    from ingestion import insert_kb_chunk
+                    insert_kb_chunk(db, doc.id, idx, chunk_text, len(chunk_text.split()))
                     chunks_created += 1
 
                 doc.chunk_count = len(text_chunks)

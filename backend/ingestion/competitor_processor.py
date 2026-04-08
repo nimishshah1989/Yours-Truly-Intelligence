@@ -353,14 +353,8 @@ def chunk_competitor_data_to_kb(
                 reviews_str = f" with {reviews} reviews" if reviews else ""
                 text += f". Rating: {rating}/5{reviews_str}."
 
-            chunk = KnowledgeBaseChunk(
-                document_id=doc.id,
-                chunk_index=0,
-                chunk_text=text,
-                embedding=None,  # filled by separate embedding pipeline
-                token_count=len(text.split()),
-            )
-            db.add(chunk)
+            from ingestion import insert_kb_chunk
+            insert_kb_chunk(db, doc.id, 0, text, len(text.split()))
             summary["documents_created"] += 1
             summary["chunks_created"] += 1
             logger.debug("Created KB doc+chunk for %s on %s", competitor_name, platform)
@@ -421,14 +415,8 @@ def chunk_competitor_data_to_kb(
                 text += f". Rating trend: {trend}"
             text += "."
 
-            chunk = KnowledgeBaseChunk(
-                document_id=doc.id,
-                chunk_index=0,
-                chunk_text=text,
-                embedding=None,
-                token_count=len(text.split()),
-            )
-            db.add(chunk)
+            from ingestion import insert_kb_chunk
+            insert_kb_chunk(db, doc.id, 0, text, len(text.split()))
             summary["documents_created"] += 1
             summary["chunks_created"] += 1
             logger.debug("Created KB rating doc+chunk for %s", competitor_name)
