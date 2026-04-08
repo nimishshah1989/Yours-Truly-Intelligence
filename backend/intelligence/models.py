@@ -527,3 +527,54 @@ class ExcludedCustomer(Base):
     __table_args__ = (
         Index("idx_excluded_customers_restaurant", "restaurant_id"),
     )
+
+
+# ---------------------------------------------------------------------------
+# 15. external_sources — curated index of cafés, publications, Reddit, etc.
+# ---------------------------------------------------------------------------
+class ExternalSource(Base):
+    """Curated external sources: elite cafés, publications, Reddit, Instagram."""
+    __tablename__ = "external_sources"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    source_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    city: Mapped[Optional[str]] = mapped_column(String(100))
+    country: Mapped[Optional[str]] = mapped_column(String(100))
+    tier: Mapped[Optional[str]] = mapped_column(String(20))
+
+    # Café links
+    google_place_id: Mapped[Optional[str]] = mapped_column(String(255))
+    swiggy_url: Mapped[Optional[str]] = mapped_column(Text)
+    zomato_url: Mapped[Optional[str]] = mapped_column(Text)
+    instagram_handle: Mapped[Optional[str]] = mapped_column(String(100))
+    website_url: Mapped[Optional[str]] = mapped_column(Text)
+
+    # Publication/feed links
+    rss_url: Mapped[Optional[str]] = mapped_column(Text)
+    scrape_url: Mapped[Optional[str]] = mapped_column(Text)
+    reddit_subreddit: Mapped[Optional[str]] = mapped_column(String(100))
+
+    # Tracking
+    rating = mapped_column(Numeric(3, 2), nullable=True)
+    review_count: Mapped[Optional[int]] = mapped_column(Integer)
+    last_scraped_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    scrape_frequency: Mapped[str] = mapped_column(String(20), default="weekly")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # Relevance
+    relevance_tags = mapped_column(ARRAY(Text), nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint("name", "city", name="uq_external_source_name_city"),
+        Index("idx_external_sources_type", "source_type"),
+        Index("idx_external_sources_city", "city"),
+        Index("idx_external_sources_tier", "tier"),
+    )

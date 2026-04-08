@@ -361,3 +361,47 @@ EXCEPTION WHEN duplicate_column THEN NULL;
 END $$;
 
 CREATE INDEX IF NOT EXISTS ix_purchase_orders_outlet ON purchase_orders(outlet_code);
+
+-- ---------------------------------------------------------------------------
+-- 14. external_sources — curated index of cafés, publications, Reddit, etc.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS external_sources (
+    id              SERIAL PRIMARY KEY,
+    source_type     VARCHAR(50) NOT NULL,    -- 'cafe_global', 'cafe_india', 'cafe_regional',
+                                             -- 'publication', 'reddit', 'instagram', 'research'
+    name            VARCHAR(255) NOT NULL,   -- 'Blue Tokai', 'Sprudge.com', 'r/coffee'
+    city            VARCHAR(100),            -- NULL for global sources
+    country         VARCHAR(100),
+    tier            VARCHAR(20),             -- 'global_elite', 'india_leader', 'regional_star'
+
+    -- For cafés
+    google_place_id VARCHAR(255),
+    swiggy_url      TEXT,
+    zomato_url      TEXT,
+    instagram_handle VARCHAR(100),
+    website_url     TEXT,
+
+    -- For publications/feeds
+    rss_url         TEXT,
+    scrape_url      TEXT,
+    reddit_subreddit VARCHAR(100),
+
+    -- Tracking
+    rating          NUMERIC(3,2),            -- Latest Google/Zomato rating
+    review_count    INTEGER,
+    last_scraped_at TIMESTAMPTZ,
+    scrape_frequency VARCHAR(20) DEFAULT 'weekly',  -- daily/weekly/monthly
+    is_active       BOOLEAN DEFAULT TRUE,
+
+    -- Relevance to restaurants
+    relevance_tags  TEXT[],                  -- ['specialty_coffee', 'brunch', 'kolkata']
+
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ DEFAULT NOW(),
+
+    CONSTRAINT uq_external_source_name_city UNIQUE (name, COALESCE(city, '__global__'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_external_sources_type ON external_sources(source_type);
+CREATE INDEX IF NOT EXISTS idx_external_sources_city ON external_sources(city);
+CREATE INDEX IF NOT EXISTS idx_external_sources_tier ON external_sources(tier);

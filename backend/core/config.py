@@ -54,6 +54,13 @@ class Settings(BaseSettings):
     # OpenAI (for Whisper STT)
     openai_api_key: str = ""
 
+    # Google Places API (external source discovery)
+    google_places_api_key: str = ""
+
+    # Apify (Swiggy/Zomato scraping)
+    apify_api_token: str = ""
+    apify_user_id: str = ""
+
     # Tally
     tally_upload_dir: str = "/tmp/tally_uploads"
 
