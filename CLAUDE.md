@@ -232,6 +232,7 @@ Nothing bypasses Quality Council. Ever.
 | Feature scope decisions | docs/PRD.md |
 | Quality council logic | docs/AGENTS.md Quality Council section |
 | Building any Phase 2 module | docs/PRODUCTION_PRD.md — find the PHASE section for your module |
+| Building competitive intelligence / external data / Kiran / Chef | docs/PRODUCTION_PRD_v2.md |
 
 ---
 
