@@ -15,8 +15,9 @@ quality:
   baseline_file: ""
 
 tests:
-  # Step 1 of forge-ship. Backend pytest, skip integration markers.
-  command: cd backend && pytest tests/ -q -m 'not integration'
+  # Step 1 of forge-ship. Wrapper script avoids YAML quoting bugs in
+  # _load_project_yaml.sh when the command has both single + double quotes.
+  command: bash .forge/run-tests.sh
 
 memory:
   # Path to a per-project memory status file the ship script will check

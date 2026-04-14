@@ -57,3 +57,6 @@ orchestrator/logs/
 .forge/logs/
 .forge/last-run.json
 .forge/baseline/
+
+# Claude Code session-local state
+.claude/
