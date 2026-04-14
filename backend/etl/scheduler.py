@@ -7,6 +7,8 @@ All jobs run in Asia/Kolkata timezone. Each job:
   4. Logs results and closes the session
 
 The scheduler is started from main.py lifespan and stopped on shutdown.
+
+Phase 2 intelligence jobs use scheduler/pipeline.py for orchestration.
 """
 
 import logging
@@ -299,160 +301,98 @@ async def send_weekly_pulse() -> None:
         logger.error("[scheduler] Weekly pulse failed: %s", exc)
 
 
-# ------------------------------------------------------------------
-# Job: nightly insight card generation (2 AM IST)
-# ------------------------------------------------------------------
+# ==================================================================
+# PHASE 2: Intelligence pipeline jobs
+# ==================================================================
 
-async def generate_insight_cards() -> None:
-    """Daily 2 AM IST: generate insight cards after ETL is done."""
-    logger.info("[scheduler] Generating insight cards")
+async def run_daily_intelligence_pipeline() -> None:
+    """Daily 2 AM IST: full pipeline — ETL → Agents → QC → Synthesis → WhatsApp.
 
-    db = SessionLocal()
+    Replaces Phase 1 nightly jobs (nightly_cogs, nightly_summary,
+    nightly_intelligence, insight_cards) with proper dependency enforcement.
+    """
+    from scheduler.pipeline import run_daily_pipeline
+
+    logger.info("[scheduler] === 2am daily intelligence pipeline ===")
     try:
-        from services.feed_service import generate_daily_cards
-
-        restaurants = _get_active_restaurants(db)
-        yesterday = date.today() - timedelta(days=1)
-        for restaurant in restaurants:
-            try:
-                cards = generate_daily_cards(restaurant.id, yesterday)
-                logger.info(
-                    "[scheduler] Generated %d cards for restaurant %s",
-                    len(cards), restaurant.id,
-                )
-            except Exception as exc:
-                logger.error(
-                    "[scheduler] Card generation failed: restaurant=%s error=%s",
-                    restaurant.id, exc,
-                )
-    finally:
-        db.close()
+        ctx = run_daily_pipeline()
+        logger.info(
+            "[scheduler] Daily pipeline complete: etl_ok=%s findings=%d approved=%d errors=%d",
+            ctx.etl_ok, len(ctx.agent_findings),
+            len(ctx.approved_findings), len(ctx.errors),
+        )
+    except Exception as exc:
+        logger.error("[scheduler] Daily pipeline FATAL: %s", exc)
 
 
-# ------------------------------------------------------------------
-# Job: nightly COGS enrichment (1:30 AM IST)
-# ------------------------------------------------------------------
-
-async def run_nightly_cogs() -> None:
-    """Daily 1:30 AM IST: enrich yesterday's orders with COGS from inventory API."""
-    logger.info("[scheduler] Running nightly COGS enrichment")
-
-    db = SessionLocal()
+async def run_ravi_4h() -> None:
+    """Ravi: every 4 hours during trading (7am, 11am, 3pm, 7pm, 11pm)."""
+    from scheduler.pipeline import run_standalone_agent
+    logger.info("[scheduler] Ravi 4-hourly run")
     try:
-        from ingestion.petpooja_inventory import ingest_inventory_cogs
-
-        restaurants = _get_active_restaurants(db)
-        yesterday = date.today() - timedelta(days=1)
-        for restaurant in restaurants:
-            try:
-                orders, items = ingest_inventory_cogs(restaurant, db, yesterday)
-                db.commit()
-                logger.info(
-                    "[scheduler] COGS OK: restaurant=%s date=%s orders=%d items=%d",
-                    restaurant.id, yesterday, orders, items,
-                )
-            except Exception as exc:
-                db.rollback()
-                logger.error(
-                    "[scheduler] COGS FAILED: restaurant=%s error=%s",
-                    restaurant.id, exc,
-                )
-    finally:
-        db.close()
+        run_standalone_agent("ravi")
+    except Exception as exc:
+        logger.error("[scheduler] Ravi 4h failed: %s", exc)
 
 
-# ------------------------------------------------------------------
-# Job: nightly daily summary (2:00 AM IST)
-# ------------------------------------------------------------------
-
-async def run_nightly_summary() -> None:
-    """Daily 2 AM IST: compute daily summary for yesterday."""
-    logger.info("[scheduler] Running nightly daily summary")
-
-    db = SessionLocal()
+async def run_maya_daily() -> None:
+    """Maya: 1am daily after day close."""
+    from scheduler.pipeline import run_standalone_agent
+    logger.info("[scheduler] Maya daily run")
     try:
-        from compute.daily_summary import compute_daily_summary
-
-        restaurants = _get_active_restaurants(db)
-        yesterday = date.today() - timedelta(days=1)
-        for restaurant in restaurants:
-            try:
-                summary = compute_daily_summary(db, restaurant.id, yesterday)
-                db.commit()
-                logger.info(
-                    "[scheduler] Summary OK: restaurant=%s date=%s revenue=%d",
-                    restaurant.id, yesterday, summary.total_revenue,
-                )
-            except Exception as exc:
-                db.rollback()
-                logger.error(
-                    "[scheduler] Summary FAILED: restaurant=%s error=%s",
-                    restaurant.id, exc,
-                )
-    finally:
-        db.close()
+        run_standalone_agent("maya")
+    except Exception as exc:
+        logger.error("[scheduler] Maya daily failed: %s", exc)
 
 
-# ------------------------------------------------------------------
-# Job: nightly pattern detection (2:30 AM IST)
-# ------------------------------------------------------------------
-
-async def run_nightly_intelligence() -> None:
-    """Daily 2:30 AM IST: run pattern detectors after daily summary."""
-    logger.info("[scheduler] Running nightly pattern detectors")
-
-    db = SessionLocal()
+async def run_arjun_scheduled() -> None:
+    """Arjun: 6am (before kitchen) and 11pm (after close)."""
+    from scheduler.pipeline import run_standalone_agent
+    logger.info("[scheduler] Arjun scheduled run")
     try:
-        from compute.pattern_detectors import run_all_detectors
-
-        restaurants = _get_active_restaurants(db)
-        for restaurant in restaurants:
-            try:
-                findings = run_all_detectors(db, restaurant.id)
-                logger.info(
-                    "[scheduler] Pattern detection OK: restaurant=%s findings=%d",
-                    restaurant.id, len(findings),
-                )
-            except Exception as exc:
-                logger.error(
-                    "[scheduler] Pattern detection FAILED: restaurant=%s error=%s",
-                    restaurant.id, exc,
-                )
-    finally:
-        db.close()
+        run_standalone_agent("arjun")
+    except Exception as exc:
+        logger.error("[scheduler] Arjun scheduled failed: %s", exc)
 
 
-# ------------------------------------------------------------------
-# Job: weekly Claude analysis (Sunday 3 AM IST)
-# ------------------------------------------------------------------
-
-async def run_weekly_intelligence() -> None:
-    """Sunday 3 AM IST: run weekly Claude analysis."""
-    logger.info("[scheduler] Running weekly Claude analysis")
-
-    db = SessionLocal()
+async def run_sara_weekly() -> None:
+    """Sara: Sunday 1am weekly customer analysis."""
+    from scheduler.pipeline import run_standalone_agent
+    logger.info("[scheduler] Sara weekly run")
     try:
-        from intelligence.weekly_analysis import run_weekly_analysis
+        run_standalone_agent("sara")
+    except Exception as exc:
+        logger.error("[scheduler] Sara weekly failed: %s", exc)
 
-        restaurants = _get_active_restaurants(db)
-        week_start = date.today() - timedelta(days=7)
-        # Align to Monday
-        week_start = week_start - timedelta(days=week_start.weekday())
-        for restaurant in restaurants:
-            try:
-                result = run_weekly_analysis(db, restaurant.id, week_start)
-                status = "written" if result else "skipped"
-                logger.info(
-                    "[scheduler] Weekly analysis %s: restaurant=%s week=%s",
-                    status, restaurant.id, week_start,
-                )
-            except Exception as exc:
-                logger.error(
-                    "[scheduler] Weekly analysis FAILED: restaurant=%s error=%s",
-                    restaurant.id, exc,
-                )
-    finally:
-        db.close()
+
+async def run_priya_daily() -> None:
+    """Priya: 7:30am daily calendar check."""
+    from scheduler.pipeline import run_standalone_agent
+    logger.info("[scheduler] Priya daily run")
+    try:
+        run_standalone_agent("priya", weekly=False)
+    except Exception as exc:
+        logger.error("[scheduler] Priya daily failed: %s", exc)
+
+
+async def run_priya_deep_scan() -> None:
+    """Priya: Sunday midnight deep scan (weekly=True)."""
+    from scheduler.pipeline import run_standalone_agent
+    logger.info("[scheduler] Priya deep scan")
+    try:
+        run_standalone_agent("priya", weekly=True)
+    except Exception as exc:
+        logger.error("[scheduler] Priya deep scan failed: %s", exc)
+
+
+async def run_monday_weekly_brief() -> None:
+    """Monday 8am: weekly intelligence brief."""
+    from scheduler.pipeline import run_weekly_brief
+    logger.info("[scheduler] Monday weekly brief")
+    try:
+        run_weekly_brief()
+    except Exception as exc:
+        logger.error("[scheduler] Weekly brief failed: %s", exc)
 
 
 # ------------------------------------------------------------------
@@ -461,6 +401,8 @@ async def run_weekly_intelligence() -> None:
 
 def start_scheduler() -> None:
     """Register all cron jobs and start the scheduler."""
+
+    # === Phase 1 jobs (kept) ===
     scheduler.add_job(
         sync_all_restaurants,
         CronTrigger(minute=0, timezone=TIMEZONE),
@@ -491,8 +433,6 @@ def start_scheduler() -> None:
         id="monthly_digests",
         replace_existing=True,
     )
-
-    # Phase 5: Briefings (Telegram + WhatsApp) + insight cards
     scheduler.add_job(
         send_morning_briefing,
         CronTrigger(hour=7, minute=30, timezone=TIMEZONE),
@@ -505,35 +445,88 @@ def start_scheduler() -> None:
         id="weekly_pulse",
         replace_existing=True,
     )
+
+    # === Phase 1 jobs DISABLED (replaced by daily intelligence pipeline) ===
+    # Previously: nightly_cogs (1:30am), nightly_summary (2am),
+    #             nightly_insight_cards (2:15am), nightly_intelligence (2:30am)
+    # These are now handled by run_daily_intelligence_pipeline at 2am
+    # with proper dependency enforcement (ETL → agents → QC → synthesis).
+
+    # === Phase 1 jobs (kept — not overlapping) ===
+    # weekly_intelligence on Sunday 3am is replaced by sara_weekly + priya_deep
+
+    # === Phase 2: Intelligence pipeline ===
+
+    # 2am IST: Full daily pipeline (ETL → Ravi/Maya/Arjun/Sara → QC → Synthesis)
     scheduler.add_job(
-        run_nightly_cogs,
-        CronTrigger(hour=1, minute=30, timezone=TIMEZONE),
-        id="nightly_cogs",
-        replace_existing=True,
-    )
-    scheduler.add_job(
-        run_nightly_summary,
+        run_daily_intelligence_pipeline,
         CronTrigger(hour=2, minute=0, timezone=TIMEZONE),
-        id="nightly_summary",
+        id="daily_intelligence_pipeline",
         replace_existing=True,
+        max_instances=1,
     )
+
+    # Ravi: every 4 hours during trading (7am, 11am, 3pm, 7pm, 11pm)
     scheduler.add_job(
-        generate_insight_cards,
-        CronTrigger(hour=2, minute=15, timezone=TIMEZONE),
-        id="nightly_insight_cards",
+        run_ravi_4h,
+        CronTrigger(hour="7,11,15,19,23", minute=0, timezone=TIMEZONE),
+        id="ravi_4h",
         replace_existing=True,
+        max_instances=1,
     )
+
+    # Maya: 1am daily
     scheduler.add_job(
-        run_nightly_intelligence,
-        CronTrigger(hour=2, minute=30, timezone=TIMEZONE),
-        id="nightly_intelligence",
+        run_maya_daily,
+        CronTrigger(hour=1, minute=0, timezone=TIMEZONE),
+        id="maya_daily",
         replace_existing=True,
+        max_instances=1,
     )
+
+    # Arjun: 6am + 11pm daily
     scheduler.add_job(
-        run_weekly_intelligence,
-        CronTrigger(day_of_week="sun", hour=3, minute=0, timezone=TIMEZONE),
-        id="weekly_intelligence",
+        run_arjun_scheduled,
+        CronTrigger(hour="6,23", minute=0, timezone=TIMEZONE),
+        id="arjun_scheduled",
         replace_existing=True,
+        max_instances=1,
+    )
+
+    # Sara: Sunday 1am
+    scheduler.add_job(
+        run_sara_weekly,
+        CronTrigger(day_of_week="sun", hour=1, minute=0, timezone=TIMEZONE),
+        id="sara_weekly",
+        replace_existing=True,
+        max_instances=1,
+    )
+
+    # Priya: 7:30am daily
+    scheduler.add_job(
+        run_priya_daily,
+        CronTrigger(hour=7, minute=30, timezone=TIMEZONE),
+        id="priya_daily",
+        replace_existing=True,
+        max_instances=1,
+    )
+
+    # Priya: Sunday midnight deep scan
+    scheduler.add_job(
+        run_priya_deep_scan,
+        CronTrigger(day_of_week="sun", hour=0, minute=0, timezone=TIMEZONE),
+        id="priya_deep_scan",
+        replace_existing=True,
+        max_instances=1,
+    )
+
+    # Weekly Brief: Monday 8am
+    scheduler.add_job(
+        run_monday_weekly_brief,
+        CronTrigger(day_of_week="mon", hour=8, minute=0, timezone=TIMEZONE),
+        id="weekly_brief_monday",
+        replace_existing=True,
+        max_instances=1,
     )
 
     scheduler.start()

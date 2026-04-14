@@ -71,6 +71,81 @@ async def send_text_message(to: str, body: str) -> Dict[str, Any]:
         return {"status": "sent", "message_id": msg_id}
 
 
+async def send_template_message(
+    to: str,
+    template_name: str,
+    language: str = "en_US",
+    body_params: Optional[List[str]] = None,
+    header_params: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """Send a pre-approved template message via WhatsApp Cloud API.
+
+    Template messages can be sent outside the 24-hour window — use these
+    for proactive outbound like daily briefings and alerts.
+
+    Args:
+        to: Recipient phone number in international format (e.g. "919876543210")
+        template_name: Name of the approved template (e.g. "daily_briefing")
+        language: Template language code (default "en_US")
+        body_params: List of strings to fill body {{1}}, {{2}}, etc.
+        header_params: List of strings to fill header {{1}}, {{2}}, etc.
+    """
+    if not settings.whatsapp_access_token or not settings.whatsapp_phone_number_id:
+        logger.warning("WhatsApp not configured — skipping template to %s", to[:6])
+        return {"status": "skipped", "reason": "not_configured"}
+
+    url = f"{GRAPH_API_URL}/{settings.whatsapp_phone_number_id}/messages"
+    headers = {
+        "Authorization": f"Bearer {settings.whatsapp_access_token}",
+        "Content-Type": "application/json",
+    }
+
+    template: Dict[str, Any] = {
+        "name": template_name,
+        "language": {"code": language},
+    }
+
+    components: List[Dict[str, Any]] = []
+    if header_params:
+        components.append({
+            "type": "header",
+            "parameters": [{"type": "text", "text": p} for p in header_params],
+        })
+    if body_params:
+        components.append({
+            "type": "body",
+            "parameters": [{"type": "text", "text": p} for p in body_params],
+        })
+    if components:
+        template["components"] = components
+
+    payload = {
+        "messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": to,
+        "type": "template",
+        "template": template,
+    }
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.post(url, headers=headers, json=payload)
+        if resp.status_code != 200:
+            logger.error(
+                "WhatsApp template send failed: status=%d body=%s",
+                resp.status_code,
+                resp.text[:500],
+            )
+            return {"status": "error", "code": resp.status_code, "detail": resp.text}
+
+        data = resp.json()
+        msg_id = data.get("messages", [{}])[0].get("id", "unknown")
+        logger.info(
+            "WhatsApp template '%s' sent to %s — id=%s",
+            template_name, to[:6], msg_id,
+        )
+        return {"status": "sent", "message_id": msg_id}
+
+
 async def send_interactive_buttons(
     to: str,
     body: str,

@@ -28,6 +28,7 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from core.database import Base
+from core.models import Restaurant  # noqa: F401 — ensures mapper resolves "Restaurant"
 
 
 # ---------------------------------------------------------------------------

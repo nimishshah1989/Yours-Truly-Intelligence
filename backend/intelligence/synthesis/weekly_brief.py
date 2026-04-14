@@ -188,17 +188,33 @@ class WeeklyBriefGenerator:
         orders = this_week.get("orders", 0)
         prev_orders = last_week.get("orders", 0)
         aov = this_week.get("avg_order_value", 0)
+        days_with_data = this_week.get("days_with_data", 0)
+        expected_days = this_week.get("expected_days", 7)
 
-        lines = [f"Revenue: {_format_currency(rev)}"]
+        lines = []
+
+        # Flag incomplete data coverage
+        if 0 < days_with_data < expected_days:
+            lines.append(
+                italic(f"⚠ Data available for {days_with_data}/{expected_days} "
+                       f"days — run backfill for complete picture.")
+            )
+
+        lines.append(f"Revenue: {_format_currency(rev)}")
 
         if prev_rev > 0:
-            pct = ((rev - prev_rev) / prev_rev) * 100
-            lines[0] += f" ({_format_pct(pct)} vs prior week)"
+            prev_days = last_week.get("days_with_data", 0)
+            # Only compare weeks with same data coverage
+            if prev_days == days_with_data or prev_days >= expected_days:
+                pct = ((rev - prev_rev) / prev_rev) * 100
+                lines[-1] += f" ({_format_pct(pct)} vs prior week)"
 
         lines.append(f"Orders: {orders}")
         if prev_orders > 0:
-            ord_pct = ((orders - prev_orders) / prev_orders) * 100
-            lines[-1] += f" ({_format_pct(ord_pct)})"
+            prev_days = last_week.get("days_with_data", 0)
+            if prev_days == days_with_data or prev_days >= expected_days:
+                ord_pct = ((orders - prev_orders) / prev_orders) * 100
+                lines[-1] += f" ({_format_pct(ord_pct)})"
 
         lines.append(f"Avg ticket: {_format_currency(aov)}")
 
@@ -380,30 +396,42 @@ class WeeklyBriefGenerator:
     # ------------------------------------------------------------------
 
     def _get_week_metrics(self, start: date, end: date) -> dict:
-        """Get aggregated metrics for a week."""
+        """Get aggregated metrics for a week from daily_summaries.
+
+        Uses pre-computed daily_summaries (authoritative, computed after ETL)
+        rather than querying orders directly. Tracks how many of the expected
+        7 days have data so the brief can flag incomplete coverage.
+        """
+        expected_days = (end - start).days + 1
+
         try:
+            # Aggregate from daily_summaries
             result = self.rodb.execute(
                 text("""
                     SELECT
-                        COALESCE(COUNT(*), 0) AS orders,
-                        COALESCE(SUM(total_amount), 0) AS revenue,
-                        COALESCE(AVG(total_amount), 0) AS avg_order_value
-                    FROM orders
+                        COALESCE(SUM(total_orders), 0) AS orders,
+                        COALESCE(SUM(total_revenue), 0) AS revenue,
+                        COUNT(*) AS days_with_data
+                    FROM daily_summaries
                     WHERE restaurant_id = :rid
-                      AND DATE(ordered_at) BETWEEN :start AND :end
-                      AND is_cancelled = false
-                      AND status = 'completed'
+                      AND summary_date BETWEEN :start AND :end
                 """),
                 {"rid": self.restaurant_id, "start": start, "end": end},
             ).fetchone()
 
+            orders = int(result[0]) if result else 0
+            revenue = int(result[1]) if result else 0
+            days_with_data = int(result[2]) if result else 0
+
             metrics = {
-                "orders": int(result[0]) if result else 0,
-                "revenue": int(result[1]) if result else 0,
-                "avg_order_value": int(result[2]) if result else 0,
+                "orders": orders,
+                "revenue": revenue,
+                "avg_order_value": revenue // orders if orders > 0 else 0,
+                "days_with_data": days_with_data,
+                "expected_days": expected_days,
             }
 
-            # Top items
+            # Top items (still from order_items — no summary equivalent)
             items = self.rodb.execute(
                 text("""
                     SELECT oi.item_name, SUM(oi.quantity) AS qty,
@@ -426,38 +454,34 @@ class WeeklyBriefGenerator:
                 for r in items
             ]
 
-            # Best day
-            days = self.rodb.execute(
+            # Best day from daily_summaries
+            best = self.rodb.execute(
                 text("""
-                    SELECT DATE(ordered_at) AS day,
-                           COUNT(*) AS orders,
-                           SUM(total_amount) AS revenue
-                    FROM orders
+                    SELECT summary_date, total_orders, total_revenue
+                    FROM daily_summaries
                     WHERE restaurant_id = :rid
-                      AND DATE(ordered_at) BETWEEN :start AND :end
-                      AND is_cancelled = false
-                      AND status = 'completed'
-                    GROUP BY DATE(ordered_at)
-                    ORDER BY revenue DESC
+                      AND summary_date BETWEEN :start AND :end
+                    ORDER BY total_revenue DESC
                     LIMIT 1
                 """),
                 {"rid": self.restaurant_id, "start": start, "end": end},
             ).fetchone()
 
-            if days:
+            if best:
                 dow_names = ["Monday", "Tuesday", "Wednesday", "Thursday",
                              "Friday", "Saturday", "Sunday"]
                 metrics["best_day"] = {
-                    "date": days[0],
-                    "day_name": dow_names[days[0].weekday()],
-                    "orders": int(days[1]),
-                    "revenue": int(days[2]),
+                    "date": best[0],
+                    "day_name": dow_names[best[0].weekday()],
+                    "orders": int(best[1]),
+                    "revenue": int(best[2]),
                 }
 
             return metrics
         except Exception as e:
             logger.warning("Week metrics query failed: %s", e)
-            return {"orders": 0, "revenue": 0, "avg_order_value": 0}
+            return {"orders": 0, "revenue": 0, "avg_order_value": 0,
+                    "days_with_data": 0, "expected_days": expected_days}
 
     def _get_week_findings(self, start: date, end: date) -> list:
         """Get all approved findings for the week."""

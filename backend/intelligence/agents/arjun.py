@@ -38,6 +38,20 @@ SUPPLIER_CONCENTRATION_THRESHOLD = 0.35  # 35% of spend from one vendor
 SUPPLIER_LOOKBACK_DAYS = 90
 MAX_FINDINGS = 2
 
+# Categories that are never "prepared" — retail packaged goods, addons, bookings
+EXCLUDED_CATEGORIES = frozenset({
+    "Others", "Beans Retail", "Bookings",
+    "Add on Beverage", "Add on Kitchen",
+})
+
+# Fallback name patterns for packaged/retail items when consumed[] data
+# is unavailable. Matched case-insensitively against item_name.
+RETAIL_NAME_PATTERNS = frozenset({
+    "mineral water", "coke", "pepsi", "diet coke", "sprite",
+    "fanta", "tonic water", "soda water", "red bull", "appy fizz",
+    "packaged juice", "tetra pack",
+})
+
 # Salary cycle modifiers
 SALARY_MODIFIERS = {
     1: {"premium": 1.20, "value": 1.00},  # Week 1 (1st-7th): premium up
@@ -98,12 +112,86 @@ class ArjunAgent(BaseAgent):
         findings.sort(key=lambda f: f.confidence_score, reverse=True)
         return findings[:MAX_FINDINGS]
 
+    def _get_prepared_items(self) -> set[str]:
+        """Return set of item names that are truly 'prepared' (not retail/addon).
+
+        Classification logic (per CLAUDE.md):
+          - 2+ distinct raw materials in consumed[] → prepared
+          - 0-1 raw materials → retail or addon → EXCLUDED
+          - Items with no consumed[] records at all → retail → EXCLUDED
+
+        Falls back to category + name pattern exclusion if consumed data is
+        unavailable.
+        """
+        from sqlalchemy import text
+
+        # Step 1: Get items with 2+ distinct raw materials from consumed[] data
+        try:
+            rows = self.rodb.execute(
+                text("""
+                    SELECT oi.item_name
+                    FROM order_items oi
+                    JOIN order_item_consumption oic ON oic.order_item_id = oi.id
+                    WHERE oi.restaurant_id = :rid
+                    GROUP BY oi.item_name
+                    HAVING COUNT(DISTINCT oic.rm_id) >= 2
+                """),
+                {"rid": self.restaurant_id},
+            ).fetchall()
+
+            prepared_names = {row[0] for row in rows}
+
+            if prepared_names:
+                logger.debug(
+                    "Prepared items from consumed[]: %d items",
+                    len(prepared_names),
+                )
+                return prepared_names
+        except Exception as e:
+            logger.debug("consumed[] lookup failed, using fallback: %s", e)
+
+        # Step 2: Fallback — exclude by category + name pattern
+        try:
+            rows = self.rodb.execute(
+                text("""
+                    SELECT name, category FROM menu_items
+                    WHERE restaurant_id = :rid AND is_active = true
+                """),
+                {"rid": self.restaurant_id},
+            ).fetchall()
+
+            prepared_names = set()
+            for row in rows:
+                name, category = row[0], row[1]
+                if category in EXCLUDED_CATEGORIES:
+                    continue
+                if name.lower().strip() in RETAIL_NAME_PATTERNS:
+                    continue
+                prepared_names.add(name)
+
+            logger.debug(
+                "Prepared items from fallback filter: %d items",
+                len(prepared_names),
+            )
+            return prepared_names
+        except Exception as e:
+            logger.warning("Fallback classification failed: %s", e)
+            return set()
+
     def _get_item_demand_by_dow(self) -> dict[str, dict[int, list[int]]]:
-        """Get order counts per menu item grouped by day-of-week.
+        """Get order counts per PREPARED menu item grouped by day-of-week.
+
+        Excludes retail items (packaged goods) and addons — only items with
+        2+ raw materials in their recipe get prep recommendations.
 
         Returns: {item_name: {dow: [count_week1, count_week2, ...]}}.
         """
         from core.models import Order, OrderItem
+
+        prepared_items = self._get_prepared_items()
+        if not prepared_items:
+            logger.warning("No prepared items found — skipping prep analysis")
+            return {}
 
         today = date.today()
         cutoff = today - timedelta(weeks=LOOKBACK_WEEKS)
@@ -122,6 +210,7 @@ class ArjunAgent(BaseAgent):
                 ),
                 Order.is_cancelled.is_(False),
                 OrderItem.is_void.is_(False),
+                OrderItem.item_name.in_(prepared_items),
             )
             .group_by(OrderItem.item_name, Order.ordered_at)
             .all()
