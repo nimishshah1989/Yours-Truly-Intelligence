@@ -48,3 +48,12 @@ htmlcov/
 
 # Tally XML exports (large financial data — never commit)
 *.xml
+
+# Forge runner — state ledger is a runtime artifact, regenerated via `forge init`
+orchestrator/state.db
+orchestrator/state.db-shm
+orchestrator/state.db-wal
+orchestrator/logs/
+.forge/logs/
+.forge/last-run.json
+.forge/baseline/

@@ -1,0 +1,13 @@
+# orchestrator/plan.yaml — chunk ledger for YTIP
+#
+# Each chunk is a unit of work forge-runner picks up. The picker walks
+# this list, filters by status (PENDING) and dependency satisfaction,
+# spawns a fresh Claude session per chunk, and updates orchestrator/state.db.
+#
+# Status values: PENDING | IN_PROGRESS | DONE | BLOCKED
+# Deps are chunk IDs that must be DONE before this one is eligible.
+#
+# Add chunks below. Each chunk MUST have a spec file at
+# docs/specs/chunks/<id>.md before forge run will pick it.
+
+chunks: []

@@ -1,0 +1,53 @@
+# .forge/project.yaml — per-project Forge OS config.
+#
+# Read by bin/forge-ship.sh and bin/post-chunk.sh. Anything left blank
+# (or set to `none`) causes the corresponding step to be skipped.
+# This is the only file that needs to differ between projects.
+
+project:
+  name: yours-truly-intelligence
+  # Repo root. Default: pwd at script invocation.
+  repo_root: .
+
+quality:
+  # Start without a hard quality gate. Add .quality/checks.py later.
+  command: ""
+  baseline_file: ""
+
+tests:
+  # Step 1 of forge-ship. Backend pytest, skip integration markers.
+  command: cd backend && pytest tests/ -q -m 'not integration'
+
+memory:
+  # Path to a per-project memory status file the ship script will check
+  # for freshness (must have been touched in the last `max_age_sec`).
+  # Leave empty to skip the freshness check.
+  status_file: ""
+  max_age_sec: 600
+
+service:
+  # systemd unit names to restart in post-chunk. Leave empty to skip.
+  backend_unit: ""
+  frontend_unit: ""
+  # Frontend dir for `npm ci && npm run build` before restart.
+  frontend_dir: ""
+
+smoke:
+  # Path to a smoke-probe script (run after deploy). Non-zero exit
+  # marks the chunk BLOCKED. Leave empty to skip.
+  script: ""
+
+bootstrap:
+  # Optional host-bootstrap script (systemd/nginx reconcile) run before
+  # service restart. Leave empty to skip.
+  script: ""
+
+post_chunk:
+  # Optional Claude headless prompt to spawn after a chunk lands
+  # (forge-compile + memory sync). Leave empty to skip.
+  spawn_claude: false
+
+runner:
+  filter: ".*"
+  timeout: "20m"
+  max_turns: 150
