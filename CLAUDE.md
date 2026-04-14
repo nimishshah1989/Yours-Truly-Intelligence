@@ -221,10 +221,28 @@ Nothing bypasses Quality Council. Ever.
 
 ---
 
+## Development workflow — use forge-runner
+
+All new development on YTIP flows through **forge-runner**. Do NOT implement features directly in an interactive Claude session unless explicitly told to skip the runner.
+
+**Workflow:** write a spec at `docs/specs/chunks/<ID>.md` → seed into `orchestrator/state.db` (or use `/chunkmaster <slice>`) → `forge run --once` → verify `state.db` shows DONE.
+
+**Full operational guide:** [docs/FORGE_RUNNER.md](docs/FORGE_RUNNER.md) — commands, failure modes, seed SQL, known latent bugs. Read it before touching `.forge/`, `orchestrator/`, or the chunk pipeline.
+
+**Quick commands:**
+```
+forge run --dry-run                 # preview next pick
+forge run --once --max-turns 150    # run one chunk end-to-end
+forge run --filter 'J-.*'           # loop a slice
+forge run --retry <ID>              # re-run a failed chunk
+forge status                        # plan summary
+```
+
 ## Read These Docs For These Tasks
 
 | Task | Read |
 |------|------|
+| Running / debugging forge-runner | docs/FORGE_RUNNER.md |
 | Building any agent | docs/AGENTS.md |
 | Building WhatsApp onboarding | docs/ONBOARDING_FLOW.md |
 | Building Priya / cultural calendar | docs/CULTURAL_MODEL.md |

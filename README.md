@@ -14,6 +14,7 @@ A restaurant intelligence engine that acts as Chief of Staff — not a dashboard
 | Real Data Pipeline | 🔴 Need to run backfill | — |
 | Intelligence Layer (findings, journal, memory) | 🔴 Need to build | — |
 | Item Classification (prepared vs retail) | 🔴 Need to build | — |
+| Forge runner (autonomous chunk loop) | ✅ Live — see [docs/FORGE_RUNNER.md](docs/FORGE_RUNNER.md) | — |
 
 ## Architecture
 
