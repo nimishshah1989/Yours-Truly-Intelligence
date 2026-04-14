@@ -230,15 +230,22 @@ If you're adding a rule that should apply to every future chunk, edit
 
 ---
 
-## Known bugs to fix upstream (track as real issues)
+## Outstanding work
 
-1. `_load_project_yaml.sh` in forge-os can't parse commands with embedded
-   quotes. Wrapper pattern (`.forge/run-tests.sh`) works around it.
-2. `bin/forge init` creates a schema missing the columns `forge_runner.state`
-   writes to. The local state.db has been migrated via `ALTER TABLE`.
-   chunkmaster writes to both `deps` and `depends_on` as a workaround.
-3. forge-ship.sh and post-chunk.sh do not update `state.db` to DONE — the
-   inner session must call `.forge/mark-done.sh` explicitly. CONDUCTOR.md
-   tells it to. If the session forgets, the chunk sticks at `IN_PROGRESS`.
-4. `runner.timeout` and `runner.max_turns` in `.forge/project.yaml` are read
-   by nothing. Pass them as CLI args: `--timeout 20m --max-turns 150`.
+All four forge-os latent bugs originally flagged here were fixed upstream in
+forge-os commit `5aa57fc` (schema, YAML parser, DONE marker, runner knobs
+from project.yaml). Pull latest `~/tools/forge-os` to pick them up — the
+runner venv uses `pip install -e .`, so no re-install needed.
+
+Remaining YTIP-specific work:
+
+1. **Two pytest failures deselected** in `.forge/run-tests.sh`:
+   - `tests/intelligence/quality_council/test_excluded_customers.py::test_excluded_phone_not_in_customer_data` — uses Postgres-only `gen_random_uuid()`, fails under sqlite test fixtures.
+   - `tests/scheduler/test_pipeline.py::test_all_intelligence_jobs_and_cron_schedules` — imports `apscheduler` which isn't in `backend/requirements.txt`.
+   Both are real bugs from the Phase-J WIP commit (`4234be9`). Write chunks to fix them and drop the `--deselect` flags.
+
+2. **`.forge/run-tests.sh` is still a wrapper** — now that the YAML parser
+   is fixed upstream, the wrapper is no longer required by forge-os, but
+   it's still the cleanest place to keep the `--deselect` flags. Once the
+   two tests are fixed, consider inlining `tests.command` back into
+   `project.yaml`.
