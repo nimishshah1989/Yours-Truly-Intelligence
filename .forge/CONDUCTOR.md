@@ -40,9 +40,8 @@ with `{reason, last_action}`, and exit non-zero so the runner marks the chunk BL
 2. Implement — edit files, run tests locally as you go.
 3. Run the project test command (`.forge/project.yaml` → `tests.command`).
 4. If green, invoke `forge ship <chunk-id> "<one-line summary>"` — the ONLY legal commit path.
-5. **After `forge ship` succeeds, immediately run:** `bash .forge/mark-done.sh <chunk-id>`
-   — this flips `state.db` to DONE so the runner's verifier passes.
-6. Exit 0.
+   `forge ship` runs tests, commits, pushes, and marks the chunk DONE in state.db as step 6/6.
+5. Exit 0.
 
 ## Failure protocol
 
